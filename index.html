@@ -1,0 +1,106 @@
+<!doctype html>
+<html lang="sv">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>GymTracker</title>
+    <script type="module" src="/src/main.ts" defer></script>
+  </head>
+  <body>
+    
+    <div id="auth-view">
+      <h2>SB GymTracker</h2>
+      <p style="color: #888; margin-bottom: 20px;">Logga in för att köra igång</p>
+      <div style="display: flex; flex-direction: column; gap: 10px; max-width: 300px;">
+        <input type="email" id="email-input" placeholder="E-post" />
+        <input type="password" id="password-input" placeholder="Lösenord" />
+        <input type="text" id="username-input" placeholder="Ditt namn (endast nytt konto)" />
+        <div style="display: flex; gap: 10px; margin-top: 10px;">
+          <button id="login-btn" style="background-color: #4CAF50; color: white;">Logga in</button>
+          <button id="signup-btn" style="background-color: #2196F3; color: white;">Skapa konto</button>
+        </div>
+        <p id="auth-message" style="color: #ff4444; margin-top: 10px;"></p>
+      </div>
+    </div>
+
+    <div id="app" style="display: none;">
+      
+      <nav id="navbar">
+        
+        <div class="nav-left">
+            <span id="app-logo">SuperBasicGymTracker</span>
+            <button id="back-btn" class="icon-btn hidden" aria-label="Gå tillbaka">
+                <svg xmlns="http://www.w3.org/2000/svg" width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="19" y1="12" x2="5" y2="12"></line><polyline points="12 19 5 12 12 5"></polyline></svg>
+            </button>
+        </div>
+        
+        <div class="nav-right" style="position: relative;">
+            <button id="settings-btn" class="icon-btn">
+                <svg xmlns="http://www.w3.org/2000/svg" width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"></circle><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path></svg>
+            </button>
+            
+            <div id="settings-dropdown" class="settings-menu hidden">
+                <p style="font-size: 12px; color: #888; margin-bottom: 4px;">Inloggad som:</p>
+                <div id="user-display" style="font-weight: bold; margin-bottom: 10px; color: white;"></div>
+                <div class="nav-divider"></div>
+                <button id="logout-btn" class="logout-link">Logga ut</button>
+            </div>
+        </div>
+      </nav>
+
+      <div id="start-view">
+        <div class="dashboard-container">
+          <div class="card">
+            <h3>Starta nytt pass</h3>
+            <div class="input-group">
+              <input type="text" id="workout-name-input" placeholder="Namn (t.ex. Rygg)" />
+              <button id="start-workout-btn">GO!</button>
+            </div>
+          </div>
+
+          <div class="card">
+            <h3>Dina tidigare pass</h3>
+            <ul id="saved-workouts-list">
+              <li>Laddar...</li>
+            </ul>
+          </div>
+        </div>
+      </div>
+
+      <div id="workout-view" style="display: none;">
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px;">
+            <h3 id="current-workout-title"></h3>
+            <button id="finish-workout-btn" class="finish-btn" aria-label="Markera pass som klart">
+              <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                <path d="M5 12.5l4 4.5L19 7" />
+              </svg>
+              <span>Done</span>
+            </button>
+        </div>
+
+        <form id="workout-form">
+           <input type="text" id="name" placeholder="Övning" required />
+           <div style="display:flex; gap:10px;">
+             <input type="number" id="sets" placeholder="Sets" required />
+             <input type="number" id="reps" placeholder="Reps" required />
+           </div>
+           <input type="number" id="weight" placeholder="Vikt (kg)" required />
+           <button type="submit">Lägg till</button>
+        </form>
+
+        <div class="filter-container" style="margin-top: 20px;">
+          <label>Visa: 
+            <select id="filter-select">
+              <option value="all">Alla</option>
+              <option value="not-done">Kvar</option>
+              <option value="done">Färdiga</option>
+            </select>
+          </label>
+        </div>
+
+        <ul id="workout-list"></ul>
+      </div> 
+    </div>
+
+  </body>
+</html>
