@@ -6,19 +6,24 @@ const SUPABASE_URL = "https://jvlzmfaqvdvqktbwvfen.supabase.co"
 const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imp2bHptZmFxdmR2cWt0Ynd2ZmVuIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Njc0NDM3OTksImV4cCI6MjA4MzAxOTc5OX0.wvg9xlSLSM7FUFX5vJmJx_WCvbNxXNgIKoaddcCc3Eo"
 const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY)
 
-// --- 2. STATE ---
-let myUserId: string | null = null; 
-let currentWorkoutId: string | null = null; 
-let currentFilter: "all" | "done" | "not-done" = "all";
+// --- 2. STATE --- appens korttidsminne, hur ser situationen ut just nu.
+let myUserId: string | null = null;  // vem är inloggad | ingen inloggad
+let currentWorkoutId: string | null = null; // vilket pass är öppet just nu | inget pass för tillfället
+let currentFilter: "all" | "done" | "not-done" = "all"; // union types till filtrering där "all är default"
 
 interface Exercise {
-  id: string; name: string; sets: number; reps: number; weight: number; isDone: boolean;
+  id: string; name: string; sets: number; reps: number; weight: number; isDone: boolean; // typning
 }
-const exercises: Array<Exercise> = [];
+const exercises: Array<Exercise> = []; // behållaren för övningarna som visas kopplat till interfacet ovan
 
 // --- 3. DOM ELEMENT ---
+// APPVYER
 const authView = document.getElementById("auth-view") as HTMLDivElement;
 const appView = document.getElementById("app") as HTMLDivElement;
+const startView = document.getElementById("start-view") as HTMLDivElement;
+const workoutView = document.getElementById("workout-view") as HTMLDivElement;
+
+//LOGIN
 const emailInput = document.getElementById("email-input") as HTMLInputElement;
 const passwordInput = document.getElementById("password-input") as HTMLInputElement;
 const usernameInput = document.getElementById("username-input") as HTMLInputElement;
@@ -34,9 +39,8 @@ const settingsDropdown = document.getElementById("settings-dropdown") as HTMLDiv
 const userDisplay = document.getElementById("user-display") as HTMLDivElement;
 const logoutBtn = document.getElementById("logout-btn") as HTMLButtonElement;
 
-// APP VYER
-const startView = document.getElementById("start-view") as HTMLDivElement;
-const workoutView = document.getElementById("workout-view") as HTMLDivElement;
+
+
 
 // DASHBOARD
 const workoutNameInput = document.getElementById("workout-name-input") as HTMLInputElement;
@@ -58,13 +62,13 @@ const filterSelect = document.getElementById("filter-select") as HTMLSelectEleme
 // --- 4. FUNKTIONER ---
 
 const updateNavbarState = (isDashboard: boolean) => {
-    // Om vi är på dashboard: Visa Logga, Dölj Pil
-    if (isDashboard) {
-        appLogo.style.display = "block";
+    
+    if (isDashboard) {                       // Visar logga och döljer pil i dashboard
+        appLogo.style.display = "block";     // Inkonsekventa sätt att dölja och visa element pga att koden växt fram gradvis
         backBtn.classList.add("hidden");
     } else {
-    // Om vi är i ett pass: Dölj Logga, Visa Pil
-        appLogo.style.display = "none";
+    
+        appLogo.style.display = "none";      // Döljer logga och visar pil i passvy
         backBtn.classList.remove("hidden");
     }
 };
@@ -78,21 +82,24 @@ const goToDashboard = () => {
   fetchWorkouts();
 };
 
-const fetchWorkouts = async () => {
-  if (!myUserId || !savedWorkoutsList) return;
+// Funktionen som fyller dashboard med data
+const fetchWorkouts = async () => {               
+  if (!myUserId || !savedWorkoutsList) return;    //  Bryt om det inte användare eller <ul> på skärmen
   savedWorkoutsList.innerHTML = '<li style="cursor:default;">Laddar... ⏳</li>';
   
-  const { data, error } = await supabase.from('workouts').select('*').eq('user_id', myUserId);
-  if (error || !data) { savedWorkoutsList.innerHTML = "<li>Kunde inte hämta pass.</li>"; return; }
+  const { data, error } = await supabase.from('workouts').select('*').eq('user_id', myUserId);  //Anropar databasen, gå till tabellen 'workouts', hämta all infomration där user_id är MITT id.
+  if (error || !data) { savedWorkoutsList.innerHTML = "<li>Kunde inte hämta pass.</li>"; return; } // Felhantering eller tom lista
   
   savedWorkoutsList.innerHTML = "";
   if (data.length === 0) { savedWorkoutsList.innerHTML = "<li>Inga pass än.</li>"; return; }
 
-  data.reverse().forEach(workout => {
+  data.reverse().forEach(workout => {           // skapar listan och lägger det senaste passet högst upp
     const li = document.createElement("li");
-    const date = workout.created_at ? new Date(workout.created_at).toLocaleDateString() : "";
+    const date = workout.created_at ? new Date(workout.created_at).toLocaleDateString() : ""; // Gör om datum till läsbart format
     
-    li.innerHTML = `
+    // renderar varje pass i listan med radera-knapp
+    
+    li.innerHTML = `                         
       <div class="workout-info-group">
         <strong>${workout.name}</strong>
         <span class="date-tag">${date}</span>
@@ -100,36 +107,37 @@ const fetchWorkouts = async () => {
       <button class="delete-workout-btn" title="Radera">🗑️</button>
     `;
 
-    li.addEventListener("click", () => loadWorkout(workout.id, workout.name));
+    li.addEventListener("click", () => loadWorkout(workout.id, workout.name)); // Gör listitem klickbart och laddar passet till nästa vy
 
     // Radera pass
-    const delBtn = li.querySelector(".delete-workout-btn") as HTMLButtonElement;
+    const delBtn = li.querySelector(".delete-workout-btn") as HTMLButtonElement; 
     delBtn.addEventListener("click", async (e) => {
-        e.stopPropagation();
-        if(confirm(`Radera "${workout.name}"?`)) {
-            await supabase.from('workouts').delete().eq('id', workout.id);
-            fetchWorkouts();
+        e.stopPropagation();                           // Stoppar klicket från att sprida sig, ett måste om en knapp är inuti något annat som är klickbart
+        if(confirm(`Radera "${workout.name}"?`)) {         // Öppnar websläsarens inbyggda popup och frågar om du är säker på att radera passet
+            await supabase.from('workouts').delete().eq('id', workout.id); //Raderar specificerat pass i databasen om radering är bekräftad
+            fetchWorkouts(); // uppdaterar listan efter radering
         }
     });
 
-    savedWorkoutsList.appendChild(li);
+    savedWorkoutsList.appendChild(li);  // Ritar om ny uppdaterad lista
   });
 };
 
+// Funktion som laddar pass och byter vy till träninsgläget efter klick på träningslistan i dashboard
 const loadWorkout = async (id: string, name: string) => {
-  currentWorkoutId = id;
-  currentWorkoutTitle.innerText = name;
-  startView.style.display = "none";
-  workoutView.style.display = "block";
+  currentWorkoutId = id;   // sparar passets id i minnet i fall man ska lägga till eller göra ändringar
+  currentWorkoutTitle.innerText = name; // Ändrar texten till passets namn högst upp
+  startView.style.display = "none"; // släcker dashboard
+  workoutView.style.display = "block"; // tänder träningsvyn
   updateNavbarState(false); // Uppdatera menyn till Pass-läge (visa pil)
   
-  exercises.length = 0;
+  exercises.length = 0;  // tömmer lådan på innehåll
   workoutList.innerHTML = "Laddar...";
 
-  const { data } = await supabase.from('exercises').select('*').eq('workout_id', id);
+  const { data } = await supabase.from('exercises').select('*').eq('workout_id', id);  // hämtar data från databasen
   if (data) {
-    data.forEach(dbExercise => {
-      exercises.push({
+    data.forEach(dbExercise => {              
+      exercises.push({                                                    // översätter databasens språk till programspråk. Hade kunnat gjort en "adapter" som ber supabase döpa om data innan den skickar det.
         id: dbExercise.id, name: dbExercise.name, sets: dbExercise.sets,
         reps: dbExercise.reps, weight: dbExercise.weight, isDone: dbExercise.is_done
       });
@@ -139,15 +147,15 @@ const loadWorkout = async (id: string, name: string) => {
 };
 
 const renderExercises = () => {
-  workoutList.innerHTML = "";
-  const filtered = exercises.filter(e => currentFilter === "all" ? true : (currentFilter === "done" ? e.isDone : !e.isDone));
+  workoutList.innerHTML = "";   // tömmer listan och börjar på noll
+  const filtered = exercises.filter(e => currentFilter === "all" ? true : (currentFilter === "done" ? e.isDone : !e.isDone)); // bestämmer vad som ska renderas baserat på currentFilter-variabeln
 
-  filtered.forEach(ex => {
+  filtered.forEach(ex => {                  // loopar igenom filtret resultat och renderar ut i html
     const li = document.createElement("li");
     li.className = "workout-item";
     li.innerHTML = `
       <label class="exercise-row">
-        <input type="checkbox" ${ex.isDone ? "checked" : ""}>
+        <input type="checkbox" ${ex.isDone ? "checked" : ""}>     
         <div class="info">
            <strong>${ex.name}</strong>
            <span class="details">${ex.sets} x ${ex.reps}</span>
@@ -159,24 +167,24 @@ const renderExercises = () => {
       <button class="delete-btn">🗑️</button>
     `;
     
-    li.querySelector("input[type='checkbox']")?.addEventListener("click", async (e) => {
-        const val = (e.target as HTMLInputElement).checked;
-        ex.isDone = val;
-        await supabase.from('exercises').update({ is_done: val }).eq('id', ex.id);
-        renderExercises();
+    li.querySelector("input[type='checkbox']")?.addEventListener("click", async (e) => { 
+        const val = (e.target as HTMLInputElement).checked;  // Är den ikryssad?
+        ex.isDone = val;    // uppdatera lokalt minne
+        await supabase.from('exercises').update({ is_done: val }).eq('id', ex.id);  // spara till databasen
+        renderExercises();  // renderar om listan om filtret är inställt på att visa oklara övningar
     });
 
-    const wInput = li.querySelector(".weight-input") as HTMLInputElement;
+    const wInput = li.querySelector(".weight-input") as HTMLInputElement;  // ändrar vikten i övningen
     wInput.addEventListener("change", async () => {
         ex.weight = Number(wInput.value);
         await supabase.from('exercises').update({ weight: ex.weight }).eq('id', ex.id);
     });
 
     li.querySelector(".delete-btn")?.addEventListener("click", async () => {
-        await supabase.from('exercises').delete().eq('id', ex.id);
-        const idx = exercises.findIndex(x => x.id === ex.id);
+        await supabase.from('exercises').delete().eq('id', ex.id); // raderar övningen från databasen
+        const idx = exercises.findIndex(x => x.id === ex.id); // tar reda på index i lokala minnet och raderar
         if (idx > -1) exercises.splice(idx, 1);
-        renderExercises();
+        renderExercises(); // renderar om listan
     });
 
     workoutList.appendChild(li);
@@ -203,8 +211,8 @@ logoutBtn?.addEventListener("click", async () => {
     settingsDropdown.classList.add("hidden");
 });
 
-supabase.auth.onAuthStateChange((event, session) => {
-  if (session) {
+supabase.auth.onAuthStateChange((_event, session) => {
+  if (session?.user) {
     myUserId = session.user.id;
     authView.style.display = "none";
     appView.style.display = "block";
