@@ -139,6 +139,13 @@ h2, h3 { color: var(--text); margin-bottom: 10px; }
 .weight-input { width: 60px; background: transparent; border: none; color: var(--text); text-align: center; font-weight: bold; font-size: 16px; }
 .delete-btn { background: none; border: none; color: var(--muted); cursor: pointer; font-size: 18px; align-self: flex-end; }
 
+.action-buttons { display: flex; gap: 8px; align-items: center; align-self: flex-end; }
+.sort-btn { background: none; border: none; color: var(--muted); cursor: pointer; font-size: 16px; padding: 4px 8px; border-radius: 4px; transition: all 0.2s; }
+.sort-btn:hover:not(:disabled) { color: var(--accent); background-color: var(--field); }
+.sort-btn:disabled { opacity: 0.3; cursor: not-allowed; }
+.delete-btn { background: none; border: none; color: var(--muted); cursor: pointer; font-size: 18px; padding: 4px 8px; transition: all 0.2s; align-self: flex-end; }
+.delete-btn:hover { color: #ff4444; }
+
 .finish-btn {
     background: var(--accent);
     color: #0f0f14;

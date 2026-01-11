@@ -146,11 +146,21 @@ const loadWorkout = async (id: string, name: string) => {
   renderExercises();
 };
 
+const moveExercise = (index: number, direction: 'up' | 'down') => {
+  if (direction === 'up' && index > 0) {
+    [exercises[index], exercises[index - 1]] = [exercises[index - 1], exercises[index]];
+  } else if (direction === 'down' && index < exercises.length - 1) {
+    [exercises[index], exercises[index + 1]] = [exercises[index + 1], exercises[index]];
+  }
+  renderExercises();
+};
+
 const renderExercises = () => {
   workoutList.innerHTML = "";   // tömmer listan och börjar på noll
   const filtered = exercises.filter(e => currentFilter === "all" ? true : (currentFilter === "done" ? e.isDone : !e.isDone)); // bestämmer vad som ska renderas baserat på currentFilter-variabeln
 
   filtered.forEach(ex => {                  // loopar igenom filtret resultat och renderar ut i html
+    const actualIndex = exercises.findIndex(e => e.id === ex.id);
     const li = document.createElement("li");
     li.className = "workout-item";
     li.innerHTML = `
@@ -164,7 +174,11 @@ const renderExercises = () => {
            <input type="number" value="${ex.weight}" class="weight-input"><span>kg</span>
         </div>
       </label>
-      <button class="delete-btn">🗑️</button>
+      <div class="action-buttons">
+        <button class="sort-btn" title="Upp" ${actualIndex === 0 ? 'disabled' : ''}>↑</button>
+        <button class="sort-btn" title="Ned" ${actualIndex === exercises.length - 1 ? 'disabled' : ''}>↓</button>
+        <button class="delete-btn">✕</button>
+      </div>
     `;
     
     li.querySelector("input[type='checkbox']")?.addEventListener("click", async (e) => { 
@@ -179,6 +193,12 @@ const renderExercises = () => {
         ex.weight = Number(wInput.value);
         await supabase.from('exercises').update({ weight: ex.weight }).eq('id', ex.id);
     });
+
+    const sortButtons = li.querySelectorAll(".sort-btn");
+    if (sortButtons.length >= 2) {
+      (sortButtons[0] as HTMLButtonElement).addEventListener("click", () => moveExercise(actualIndex, 'up'));
+      (sortButtons[1] as HTMLButtonElement).addEventListener("click", () => moveExercise(actualIndex, 'down'));
+    }
 
     li.querySelector(".delete-btn")?.addEventListener("click", async () => {
         await supabase.from('exercises').delete().eq('id', ex.id); // raderar övningen från databasen
