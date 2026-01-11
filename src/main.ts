@@ -1,4 +1,5 @@
 import { createClient } from '@supabase/supabase-js'
+import type { AuthChangeEvent, Session } from '@supabase/supabase-js'
 import "./style.css"; 
 
 // --- 1. KONFIGURATION ---
@@ -15,6 +16,25 @@ interface Exercise {
   id: string; name: string; sets: number; reps: number; weight: number; isDone: boolean; // typning
 }
 const exercises: Array<Exercise> = []; // behållaren för övningarna som visas kopplat till interfacet ovan
+
+// Databasrad-typer (Supabase)
+interface WorkoutRow {
+  id: string;
+  user_id: string;
+  name: string;
+  created_at: string;
+}
+
+interface ExerciseRow {
+  id: string;
+  workout_id: string;
+  name: string;
+  sets: number;
+  reps: number;
+  weight: number;
+  is_done: boolean;
+  created_at: string;
+}
 
 // --- 3. DOM ELEMENT ---
 // APPVYER
@@ -87,13 +107,16 @@ const fetchWorkouts = async () => {
   if (!myUserId || !savedWorkoutsList) return;    //  Bryt om det inte användare eller <ul> på skärmen
   savedWorkoutsList.innerHTML = '<li style="cursor:default;">Laddar... ⏳</li>';
   
-  const { data, error } = await supabase.from('workouts').select('*').eq('user_id', myUserId);  //Anropar databasen, gå till tabellen 'workouts', hämta all infomration där user_id är MITT id.
+  const { data, error } = await supabase
+    .from<WorkoutRow>('workouts')
+    .select('*')
+    .eq('user_id', myUserId);  //Anropar databasen, gå till tabellen 'workouts', hämta all infomration där user_id är MITT id.
   if (error || !data) { savedWorkoutsList.innerHTML = "<li>Kunde inte hämta pass.</li>"; return; } // Felhantering eller tom lista
   
   savedWorkoutsList.innerHTML = "";
   if (data.length === 0) { savedWorkoutsList.innerHTML = "<li>Inga pass än.</li>"; return; }
 
-  data.reverse().forEach(workout => {           // skapar listan och lägger det senaste passet högst upp
+  data.reverse().forEach((workout: WorkoutRow) => {           // skapar listan och lägger det senaste passet högst upp
     const li = document.createElement("li");
     const date = workout.created_at ? new Date(workout.created_at).toLocaleDateString() : ""; // Gör om datum till läsbart format
     
@@ -134,9 +157,12 @@ const loadWorkout = async (id: string, name: string) => {
   exercises.length = 0;  // tömmer lådan på innehåll
   workoutList.innerHTML = "Laddar...";
 
-  const { data } = await supabase.from('exercises').select('*').eq('workout_id', id);  // hämtar data från databasen
+  const { data } = await supabase
+    .from<ExerciseRow>('exercises')
+    .select('*')
+    .eq('workout_id', id);  // hämtar data från databasen
   if (data) {
-    data.forEach(dbExercise => {              
+    data.forEach((dbExercise: ExerciseRow) => {              
       exercises.push({                                                    // översätter databasens språk till programspråk. Hade kunnat gjort en "adapter" som ber supabase döpa om data innan den skickar det.
         id: dbExercise.id, name: dbExercise.name, sets: dbExercise.sets,
         reps: dbExercise.reps, weight: dbExercise.weight, isDone: dbExercise.is_done
@@ -214,24 +240,24 @@ const renderExercises = () => {
 
 // --- 5. EVENT LISTENERS ---
 
-loginBtn.addEventListener("click", async () => {
+loginBtn.addEventListener("click", async (_e: MouseEvent) => {
   const { error } = await supabase.auth.signInWithPassword({ email: emailInput.value, password: passwordInput.value });
   if (error) authMessage.innerText = error.message;
 });
 
-signupBtn.addEventListener("click", async () => {
+signupBtn.addEventListener("click", async (_e: MouseEvent) => {
   const { data, error } = await supabase.auth.signUp({ email: emailInput.value, password: passwordInput.value });
   if (error) { authMessage.innerText = error.message; return; }
   if (data.user && usernameInput.value) await supabase.from('users').insert({ id: data.user.id, email: emailInput.value, name: usernameInput.value });
   alert("Konto skapat!");
 });
 
-logoutBtn?.addEventListener("click", async () => {
+logoutBtn?.addEventListener("click", async (_e: MouseEvent) => {
     await supabase.auth.signOut();
     settingsDropdown.classList.add("hidden");
 });
 
-supabase.auth.onAuthStateChange((_event, session) => {
+supabase.auth.onAuthStateChange((_event: AuthChangeEvent, session: Session | null) => {
   if (session?.user) {
     myUserId = session.user.id;
     authView.style.display = "none";
@@ -249,24 +275,24 @@ supabase.auth.onAuthStateChange((_event, session) => {
 });
 
 // Navigation
-backBtn?.addEventListener("click", () => {
+backBtn?.addEventListener("click", (_e: MouseEvent) => {
     goToDashboard();
     settingsDropdown.classList.add("hidden");
 });
 
-settingsBtn?.addEventListener("click", (e) => {
+settingsBtn?.addEventListener("click", (e: MouseEvent) => {
     e.stopPropagation();
     settingsDropdown.classList.toggle("hidden");
 });
 
-document.addEventListener("click", (e) => {
+document.addEventListener("click", (e: MouseEvent) => {
     if (settingsDropdown && !settingsDropdown.classList.contains("hidden") && !settingsDropdown.contains(e.target as Node) && e.target !== settingsBtn) {
         settingsDropdown.classList.add("hidden");
     }
 });
 
 // App Logic
-startWorkoutBtn?.addEventListener("click", async () => {
+startWorkoutBtn?.addEventListener("click", async (_e: MouseEvent) => {
     const name = workoutNameInput.value;
     if (!name) return alert("Ange namn");
     const { data } = await supabase.from('workouts').insert({ name, user_id: myUserId }).select().single();
@@ -274,7 +300,7 @@ startWorkoutBtn?.addEventListener("click", async () => {
     workoutNameInput.value = "";
 });
 
-finishWorkoutBtn?.addEventListener("click", async () => {
+finishWorkoutBtn?.addEventListener("click", async (_e: MouseEvent) => {
     if (currentWorkoutId) {
         // Nollställ checkboxar
         await supabase.from('exercises').update({ is_done: false }).eq('workout_id', currentWorkoutId);
@@ -282,11 +308,15 @@ finishWorkoutBtn?.addEventListener("click", async () => {
     goToDashboard();
 });
 
-workoutForm?.addEventListener("submit", async (e) => {
-    e.preventDefault();
+workoutForm?.addEventListener("submit", async (e: SubmitEvent) => {
+  e.preventDefault();
     if (!currentWorkoutId) return;
     const newEx = { workout_id: currentWorkoutId, name: nameInput.value, sets: +sets.value, reps: +reps.value, weight: +weight.value, is_done: false };
-    const { data } = await supabase.from('exercises').insert(newEx).select().single();
+  const { data } = await supabase
+    .from<ExerciseRow>('exercises')
+    .insert(newEx)
+    .select()
+    .single();
     if (data) {
         exercises.push({ id: data.id, name: data.name, sets: data.sets, reps: data.reps, weight: data.weight, isDone: data.is_done });
         renderExercises();
@@ -296,6 +326,6 @@ workoutForm?.addEventListener("submit", async (e) => {
 });
 
 filterSelect?.addEventListener("change", () => {
-    currentFilter = filterSelect.value as any;
+  currentFilter = filterSelect.value as 'all' | 'done' | 'not-done';
     renderExercises();
 });
