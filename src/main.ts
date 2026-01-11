@@ -108,7 +108,7 @@ const fetchWorkouts = async () => {
   savedWorkoutsList.innerHTML = '<li style="cursor:default;">Laddar... ⏳</li>';
   
   const { data, error } = await supabase
-    .from<WorkoutRow>('workouts')
+    .from('workouts')
     .select('*')
     .eq('user_id', myUserId);  //Anropar databasen, gå till tabellen 'workouts', hämta all infomration där user_id är MITT id.
   if (error || !data) { savedWorkoutsList.innerHTML = "<li>Kunde inte hämta pass.</li>"; return; } // Felhantering eller tom lista
@@ -116,7 +116,7 @@ const fetchWorkouts = async () => {
   savedWorkoutsList.innerHTML = "";
   if (data.length === 0) { savedWorkoutsList.innerHTML = "<li>Inga pass än.</li>"; return; }
 
-  data.reverse().forEach((workout: WorkoutRow) => {           // skapar listan och lägger det senaste passet högst upp
+  (data as WorkoutRow[]).reverse().forEach((workout: WorkoutRow) => {           // skapar listan och lägger det senaste passet högst upp
     const li = document.createElement("li");
     const date = workout.created_at ? new Date(workout.created_at).toLocaleDateString() : ""; // Gör om datum till läsbart format
     
@@ -158,11 +158,11 @@ const loadWorkout = async (id: string, name: string) => {
   workoutList.innerHTML = "Laddar...";
 
   const { data } = await supabase
-    .from<ExerciseRow>('exercises')
+    .from('exercises')
     .select('*')
     .eq('workout_id', id);  // hämtar data från databasen
   if (data) {
-    data.forEach((dbExercise: ExerciseRow) => {              
+    (data as ExerciseRow[]).forEach((dbExercise: ExerciseRow) => {              
       exercises.push({                                                    // översätter databasens språk till programspråk. Hade kunnat gjort en "adapter" som ber supabase döpa om data innan den skickar det.
         id: dbExercise.id, name: dbExercise.name, sets: dbExercise.sets,
         reps: dbExercise.reps, weight: dbExercise.weight, isDone: dbExercise.is_done
@@ -312,13 +312,14 @@ workoutForm?.addEventListener("submit", async (e: SubmitEvent) => {
   e.preventDefault();
     if (!currentWorkoutId) return;
     const newEx = { workout_id: currentWorkoutId, name: nameInput.value, sets: +sets.value, reps: +reps.value, weight: +weight.value, is_done: false };
-  const { data } = await supabase
-    .from<ExerciseRow>('exercises')
-    .insert(newEx)
-    .select()
-    .single();
+    const { data } = await supabase
+      .from('exercises')
+      .insert(newEx)
+      .select()
+      .single();
     if (data) {
-        exercises.push({ id: data.id, name: data.name, sets: data.sets, reps: data.reps, weight: data.weight, isDone: data.is_done });
+        const row = data as ExerciseRow;
+        exercises.push({ id: row.id, name: row.name, sets: row.sets, reps: row.reps, weight: row.weight, isDone: row.is_done });
         renderExercises();
         workoutForm.reset();
         nameInput.focus();
