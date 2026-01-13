@@ -197,7 +197,7 @@ const renderExercises = () => {
            <span class="details">${ex.sets} x ${ex.reps}</span>
         </div>
         <div class="weight-box">
-           <input type="number" value="${ex.weight}" class="weight-input"><span>kg</span>
+           <input type="number" value="${ex.weight}" class="weight-input" step="0.1"><span>kg</span>
         </div>
       </label>
       <div class="action-buttons">
