@@ -13,7 +13,7 @@ let currentWorkoutId: string | null = null; // vilket pass är öppet just nu | 
 let currentFilter: "all" | "done" | "not-done" = "all"; // union types till filtrering där "all är default"
 
 interface Exercise {
-  id: string; name: string; sets: number; reps: number; weight: number; isDone: boolean; // typning
+  id: string; name: string; sets: number; reps: number; weight: number; isDone: boolean;  // typning
 }
 const exercises: Array<Exercise> = []; // behållaren för övningarna som visas kopplat till interfacet ovan
 
@@ -36,12 +36,23 @@ interface ExerciseRow {
   created_at: string;
 }
 
+interface WorkoutLogRow {
+  id: string;
+  workout_id: string;
+  total_volume: number;
+  completed_at: string;
+  workouts: {
+    name: string;
+  };
+}
+
 // --- 3. DOM ELEMENT ---
 // APPVYER
 const authView = document.getElementById("auth-view") as HTMLDivElement;
 const appView = document.getElementById("app") as HTMLDivElement;
 const startView = document.getElementById("start-view") as HTMLDivElement;
 const workoutView = document.getElementById("workout-view") as HTMLDivElement;
+const statisticsView = document.getElementById("statistics-view") as HTMLDivElement;
 
 //LOGIN
 const emailInput = document.getElementById("email-input") as HTMLInputElement;
@@ -59,8 +70,9 @@ const settingsDropdown = document.getElementById("settings-dropdown") as HTMLDiv
 const userDisplay = document.getElementById("user-display") as HTMLDivElement;
 const logoutBtn = document.getElementById("logout-btn") as HTMLButtonElement;
 
-
-
+// STATS
+const statsCards = document.getElementById("stats-cards") as HTMLDivElement;
+const workoutLogsList = document.getElementById("workout-logs-list") as HTMLUListElement;
 
 // DASHBOARD
 const workoutNameInput = document.getElementById("workout-name-input") as HTMLInputElement;
@@ -84,7 +96,7 @@ const filterSelect = document.getElementById("filter-select") as HTMLSelectEleme
 const updateNavbarState = (isDashboard: boolean) => {
     
     if (isDashboard) {                       // Visar logga och döljer pil i dashboard
-        appLogo.style.display = "block";     // Inkonsekventa sätt att dölja och visa element pga att koden växt fram gradvis
+        appLogo.style.display = "block";     
         backBtn.classList.add("hidden");
     } else {
     
@@ -97,6 +109,7 @@ const goToDashboard = () => {
   currentWorkoutId = null;
   exercises.length = 0;
   workoutView.style.display = "none";
+  statisticsView.style.display = "none";
   startView.style.display = "block";
   updateNavbarState(true); // Uppdatera menyn till Dashboard-läge
   fetchWorkouts();
@@ -104,23 +117,21 @@ const goToDashboard = () => {
 
 // Funktionen som fyller dashboard med data
 const fetchWorkouts = async () => {               
-  if (!myUserId || !savedWorkoutsList) return;    //  Bryt om det inte användare eller <ul> på skärmen
+  if (!myUserId || !savedWorkoutsList) return;
   savedWorkoutsList.innerHTML = '<li style="cursor:default;">Laddar... ⏳</li>';
   
   const { data, error } = await supabase
     .from('workouts')
     .select('*')
-    .eq('user_id', myUserId);  //Anropar databasen, gå till tabellen 'workouts', hämta all infomration där user_id är MITT id.
-  if (error || !data) { savedWorkoutsList.innerHTML = "<li>Kunde inte hämta pass.</li>"; return; } // Felhantering eller tom lista
+    .eq('user_id', myUserId);
+  if (error || !data) { savedWorkoutsList.innerHTML = "<li>Kunde inte hämta pass.</li>"; return; }
   
   savedWorkoutsList.innerHTML = "";
   if (data.length === 0) { savedWorkoutsList.innerHTML = "<li>Inga pass än.</li>"; return; }
 
-  (data as WorkoutRow[]).reverse().forEach((workout: WorkoutRow) => {           // skapar listan och lägger det senaste passet högst upp
+  (data as WorkoutRow[]).reverse().forEach((workout: WorkoutRow) => {
     const li = document.createElement("li");
-    const date = workout.created_at ? new Date(workout.created_at).toLocaleDateString() : ""; // Gör om datum till läsbart format
-    
-    // renderar varje pass i listan med radera-knapp
+    const date = workout.created_at ? new Date(workout.created_at).toLocaleDateString() : "";
     
     li.innerHTML = `                         
       <div class="workout-info-group">
@@ -130,46 +141,150 @@ const fetchWorkouts = async () => {
       <button class="delete-workout-btn" title="Radera">🗑️</button>
     `;
 
-    li.addEventListener("click", () => loadWorkout(workout.id, workout.name)); // Gör listitem klickbart och laddar passet till nästa vy
+    li.addEventListener("click", () => loadWorkout(workout.id, workout.name));
 
     // Radera pass
     const delBtn = li.querySelector(".delete-workout-btn") as HTMLButtonElement; 
     delBtn.addEventListener("click", async (e) => {
-        e.stopPropagation();                           // Stoppar klicket från att sprida sig, ett måste om en knapp är inuti något annat som är klickbart
-        if(confirm(`Radera "${workout.name}"?`)) {         // Öppnar websläsarens inbyggda popup och frågar om du är säker på att radera passet
-            await supabase.from('workouts').delete().eq('id', workout.id); //Raderar specificerat pass i databasen om radering är bekräftad
-            fetchWorkouts(); // uppdaterar listan efter radering
+        e.stopPropagation();
+        if(confirm(`Radera "${workout.name}"?`)) {
+            await supabase.from('workouts').delete().eq('id', workout.id);
+            fetchWorkouts();
         }
     });
 
-    savedWorkoutsList.appendChild(li);  // Ritar om ny uppdaterad lista
+    savedWorkoutsList.appendChild(li);
   });
 };
 
 // Funktion som laddar pass och byter vy till träninsgläget efter klick på träningslistan i dashboard
 const loadWorkout = async (id: string, name: string) => {
-  currentWorkoutId = id;   // sparar passets id i minnet i fall man ska lägga till eller göra ändringar
-  currentWorkoutTitle.innerText = name; // Ändrar texten till passets namn högst upp
-  startView.style.display = "none"; // släcker dashboard
-  workoutView.style.display = "block"; // tänder träningsvyn
-  updateNavbarState(false); // Uppdatera menyn till Pass-läge (visa pil)
+  currentWorkoutId = id;
+  currentWorkoutTitle.innerText = name;
+  startView.style.display = "none";
+  workoutView.style.display = "block";
+  statisticsView.style.display = "none";
+  updateNavbarState(false);
   
-  exercises.length = 0;  // tömmer lådan på innehåll
+  exercises.length = 0;
   workoutList.innerHTML = "Laddar...";
 
   const { data } = await supabase
     .from('exercises')
     .select('*')
-    .eq('workout_id', id);  // hämtar data från databasen
+    .eq('workout_id', id);
   if (data) {
-    (data as ExerciseRow[]).forEach((dbExercise: ExerciseRow) => {              
-      exercises.push({                                                    // översätter databasens språk till programspråk. Hade kunnat gjort en "adapter" som ber supabase döpa om data innan den skickar det.
+    (data as ExerciseRow[]).forEach((dbExercise: ExerciseRow) => {
+      exercises.push({
         id: dbExercise.id, name: dbExercise.name, sets: dbExercise.sets,
         reps: dbExercise.reps, weight: dbExercise.weight, isDone: dbExercise.is_done
       });
     });
   }
   renderExercises();
+};
+
+// Visa statistik-vy
+const showStatistics = async () => {
+  startView.style.display = "none";
+  workoutView.style.display = "none";
+  statisticsView.style.display = "block";
+  updateNavbarState(false);
+  await loadWorkoutLogs();
+};
+
+// Ladda workout logs från databasen
+const loadWorkoutLogs = async () => {
+  const { data, error } = await supabase
+    .from('workout_logs')
+    .select('*, workouts(name)')
+    .order('completed_at', { ascending: false })
+    .limit(20);
+
+  if (error) {
+    console.error('Fel vid hämtning av logs:', error);
+    return;
+  }
+
+  // Beräkna statistik för olika tidsperioder
+  const now = new Date();
+  const weekAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
+  const monthAgo = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
+  const yearAgo = new Date(now.getTime() - 365 * 24 * 60 * 60 * 1000);
+
+  let weekVolume = 0, weekCount = 0;
+  let monthVolume = 0, monthCount = 0;
+  let yearVolume = 0, yearCount = 0;
+  let totalVolume = 0, totalCount = 0;
+
+  // Rensa listan
+  workoutLogsList.innerHTML = '';
+
+  if (data && data.length > 0) {
+    (data as WorkoutLogRow[]).forEach((log: WorkoutLogRow) => {
+      const logDate = new Date(log.completed_at);
+      
+      // Räkna totalt
+      totalVolume += log.total_volume || 0;
+      totalCount += 1;
+
+      // Räkna vecka
+      if (logDate >= weekAgo) {
+        weekVolume += log.total_volume || 0;
+        weekCount += 1;
+      }
+
+      // Räkna månad
+      if (logDate >= monthAgo) {
+        monthVolume += log.total_volume || 0;
+        monthCount += 1;
+      }
+
+      // Räkna år
+      if (logDate >= yearAgo) {
+        yearVolume += log.total_volume || 0;
+        yearCount += 1;
+      }
+
+      // Lägg till i senaste pass-listan
+      const logItem = document.createElement('li');
+      logItem.className = 'log-item';
+      const dateOnly = log.completed_at ? log.completed_at.split('T')[0] : 'Inget datum';
+      logItem.innerHTML = `
+        <div class="log-info">
+          <div class="log-name">💪 ${log.workouts?.name || 'Okänt Pass'}</div>
+          <div class="log-date">${dateOnly}</div>
+        </div>
+        <div class="log-volume">${log.total_volume || 0} kg</div>
+      `;
+      workoutLogsList.appendChild(logItem);
+    });
+  }
+
+  // Visa statistik-kort
+  statsCards.innerHTML = `
+    <div class="stat-card">
+      <div class="stat-card-header">💪 Senaste Veckan:</div>
+      <div class="stat-card-content">
+        <div>Antal Pass: <strong>${weekCount}</strong></div>
+        <div>Total Volym: <strong>${weekVolume.toLocaleString()} kg</strong></div>
+      </div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-card-header">💪 Senaste Månaden:</div>
+      <div class="stat-card-content">
+        <div>Antal Pass: <strong>${monthCount}</strong></div>
+        <div>Total Volym: <strong>${monthVolume.toLocaleString()} kg</strong></div>
+      </div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-card-header">💪 Hittills i År:</div>
+      <div class="stat-card-content">
+        <div>Antal Pass: <strong>${yearCount}</strong></div>
+        <div>Total Volym: <strong>${yearVolume.toLocaleString()} kg</strong></div>
+      </div>
+    </div>
+  `;
 };
 
 const moveExercise = (index: number, direction: 'up' | 'down') => {
@@ -182,10 +297,10 @@ const moveExercise = (index: number, direction: 'up' | 'down') => {
 };
 
 const renderExercises = () => {
-  workoutList.innerHTML = "";   // tömmer listan och börjar på noll
-  const filtered = exercises.filter(e => currentFilter === "all" ? true : (currentFilter === "done" ? e.isDone : !e.isDone)); // bestämmer vad som ska renderas baserat på currentFilter-variabeln
+  workoutList.innerHTML = "";
+  const filtered = exercises.filter(e => currentFilter === "all" ? true : (currentFilter === "done" ? e.isDone : !e.isDone));
 
-  filtered.forEach(ex => {                  // loopar igenom filtret resultat och renderar ut i html
+  filtered.forEach(ex => {
     const actualIndex = exercises.findIndex(e => e.id === ex.id);
     const li = document.createElement("li");
     li.className = "workout-item";
@@ -208,13 +323,13 @@ const renderExercises = () => {
     `;
     
     li.querySelector("input[type='checkbox']")?.addEventListener("click", async (e) => { 
-        const val = (e.target as HTMLInputElement).checked;  // Är den ikryssad?
-        ex.isDone = val;    // uppdatera lokalt minne
-        await supabase.from('exercises').update({ is_done: val }).eq('id', ex.id);  // spara till databasen
-        renderExercises();  // renderar om listan om filtret är inställt på att visa oklara övningar
+        const val = (e.target as HTMLInputElement).checked;
+        ex.isDone = val;
+        await supabase.from('exercises').update({ is_done: val }).eq('id', ex.id);
+        renderExercises();
     });
 
-    const wInput = li.querySelector(".weight-input") as HTMLInputElement;  // ändrar vikten i övningen
+    const wInput = li.querySelector(".weight-input") as HTMLInputElement;
     wInput.addEventListener("change", async () => {
         ex.weight = Number(wInput.value);
         await supabase.from('exercises').update({ weight: ex.weight }).eq('id', ex.id);
@@ -227,16 +342,71 @@ const renderExercises = () => {
     }
 
     li.querySelector(".delete-btn")?.addEventListener("click", async () => {
-        await supabase.from('exercises').delete().eq('id', ex.id); // raderar övningen från databasen
-        const idx = exercises.findIndex(x => x.id === ex.id); // tar reda på index i lokala minnet och raderar
+        await supabase.from('exercises').delete().eq('id', ex.id);
+        const idx = exercises.findIndex(x => x.id === ex.id);
         if (idx > -1) exercises.splice(idx, 1);
-        renderExercises(); // renderar om listan
+        renderExercises();
     });
 
     workoutList.appendChild(li);
   });
 };
 
+const calculateTotalVolume = (): number => {
+  return exercises
+  .filter(ex => ex.isDone) 
+  .reduce((total, ex) => {
+    return total + (ex.sets * ex.reps * ex.weight);
+  }, 0);
+};
+
+const logWorkoutCompletion = async (workoutId: string) => {
+  const totalVolume = calculateTotalVolume();
+  if (totalVolume === 0) {
+    alert("Du måste slutföra minst en övning innan du kan avsluta passet!");
+    return;
+  }
+  const today = new Date().toISOString().split('T')[0];
+  
+  const { error } = await supabase.from('workout_logs').insert({
+    workout_id: workoutId,
+    total_volume: totalVolume,
+    completed_at: today
+  });
+  
+  if (error) {
+    console.error('Fel vid sparning av log:', error);
+  } else {
+    showCompletionModal(totalVolume);
+    console.log('✅ Pass loggat! Total volym:', totalVolume, 'kg');
+  }
+};
+
+const showCompletionModal = (totalVolume: number) => {
+  const modal = document.createElement('div');
+  modal.className = 'completion-modal';
+  modal.innerHTML = `
+    <div class="modal-content">
+      <div class="modal-icon">💪</div>
+      <h2>Grattis!</h2>
+      <p>Du har slutfört passet!</p>
+      
+      <div class="volume-box">
+        <p>Total Volym</p>
+        <h3>${totalVolume} kg</h3>
+      </div>
+      
+      <p class="modal-footer">Starkt jobbat, fortsätt så!</p>
+      <button class="modal-btn">Stäng</button>
+    </div>
+  `;
+  
+  document.body.appendChild(modal);
+  
+  modal.querySelector('.modal-btn')?.addEventListener('click', () => {
+    modal.remove();
+  });
+};
 
 // --- 5. EVENT LISTENERS ---
 
@@ -262,7 +432,7 @@ supabase.auth.onAuthStateChange((_event: AuthChangeEvent, session: Session | nul
     myUserId = session.user.id;
     authView.style.display = "none";
     appView.style.display = "block";
-    updateNavbarState(true); // Visa Logga som standard
+    updateNavbarState(true);
     
     if (userDisplay) userDisplay.innerText = session.user.email || "Användare";
     
@@ -291,6 +461,13 @@ document.addEventListener("click", (e: MouseEvent) => {
     }
 });
 
+const statsBtn = document.getElementById("stats-btn") as HTMLButtonElement;
+
+statsBtn?.addEventListener('click', () => {
+  settingsDropdown.classList.add('hidden');
+  showStatistics();
+});
+
 // App Logic
 startWorkoutBtn?.addEventListener("click", async (_e: MouseEvent) => {
     const name = workoutNameInput.value;
@@ -302,8 +479,14 @@ startWorkoutBtn?.addEventListener("click", async (_e: MouseEvent) => {
 
 finishWorkoutBtn?.addEventListener("click", async (_e: MouseEvent) => {
     if (currentWorkoutId) {
+        await logWorkoutCompletion(currentWorkoutId);
+        
         // Nollställ checkboxar
+        exercises.forEach(ex => {
+            ex.isDone = false;
+        });
         await supabase.from('exercises').update({ is_done: false }).eq('workout_id', currentWorkoutId);
+        renderExercises();
     }
     goToDashboard();
 });
