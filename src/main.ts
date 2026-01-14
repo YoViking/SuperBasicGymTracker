@@ -204,7 +204,8 @@ const loadWorkoutLogs = async () => {
   
   const { data, error } = await supabase
     .from('workout_logs')
-    .select('id, workout_id, total_volume, completed_at, workouts(name, user_id)')
+    .select('id, workout_id, total_volume, completed_at, workouts!inner(name, user_id)')
+    .eq('workouts.user_id', myUserId)
     .order('completed_at', { ascending: false })
     .limit(20);
 
