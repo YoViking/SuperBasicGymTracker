@@ -43,6 +43,7 @@ interface WorkoutLogRow {
   completed_at: string;
   workouts: {
     name: string;
+    user_id: string;
   };
 }
 
@@ -198,12 +199,14 @@ const loadWorkoutLogs = async () => {
   if (!myUserId) return;
   const { data, error } = await supabase
     .from('workout_logs')
-    .select('*, workouts(name)')
+    .select('id, workout_id, total_volume, completed_at, workouts!inner(name, user_id)')
+    .eq('workouts.user_id', myUserId)
     .order('completed_at', { ascending: false })
     .limit(20);
 
   if (error) {
     console.error('Fel vid hämtning av logs:', error);
+    workoutLogsList.innerHTML = '<li>Kunde inte hämta loggar.</li>';
     return;
   }
 
@@ -253,7 +256,7 @@ const loadWorkoutLogs = async () => {
       const dateOnly = log.completed_at ? log.completed_at.split('T')[0] : 'Inget datum';
       logItem.innerHTML = `
         <div class="log-info">
-          <div class="log-name">💪 ${log.workouts?.name || 'Okänt Pass'}</div>
+          <div class="log-name">${log.workouts?.name || 'Okänt Pass'}</div>
           <div class="log-date">${dateOnly}</div>
         </div>
         <div class="log-volume">${log.total_volume || 0} kg</div>
@@ -265,21 +268,21 @@ const loadWorkoutLogs = async () => {
   // Visa statistik-kort
   statsCards.innerHTML = `
     <div class="stat-card">
-      <div class="stat-card-header">💪 Senaste Veckan:</div>
+      <div class="stat-card-header">Senaste Veckan:</div>
       <div class="stat-card-content">
         <div>Antal Pass: <strong>${weekCount}</strong></div>
         <div>Total Volym: <strong>${weekVolume.toLocaleString()} kg</strong></div>
       </div>
     </div>
     <div class="stat-card">
-      <div class="stat-card-header">💪 Senaste Månaden:</div>
+      <div class="stat-card-header">Senaste Månaden:</div>
       <div class="stat-card-content">
         <div>Antal Pass: <strong>${monthCount}</strong></div>
         <div>Total Volym: <strong>${monthVolume.toLocaleString()} kg</strong></div>
       </div>
     </div>
     <div class="stat-card">
-      <div class="stat-card-header">💪 Hittills i År:</div>
+      <div class="stat-card-header">Hittills i År:</div>
       <div class="stat-card-content">
         <div>Antal Pass: <strong>${yearCount}</strong></div>
         <div>Total Volym: <strong>${yearVolume.toLocaleString()} kg</strong></div>
@@ -361,26 +364,28 @@ const calculateTotalVolume = (): number => {
   }, 0);
 };
 
-const logWorkoutCompletion = async (workoutId: string) => {
-  const totalVolume = calculateTotalVolume();
+const logWorkoutCompletion = async (workoutId: string): Promise<boolean> => {
+  const totalVolume = Math.round(calculateTotalVolume()); // bigint i DB kräver heltal
   if (totalVolume === 0) {
     alert("Du måste slutföra minst en övning innan du kan avsluta passet!");
-    return;
+    return false;
   }
-  const today = new Date().toISOString().split('T')[0];
-  
+  const completedAt = new Date().toISOString();
+
   const { error } = await supabase.from('workout_logs').insert({
     workout_id: workoutId,
     total_volume: totalVolume,
-    completed_at: today
+    completed_at: completedAt
   });
-  
+
   if (error) {
     console.error('Fel vid sparning av log:', error);
-  } else {
-    showCompletionModal(totalVolume);
-    console.log('✅ Pass loggat! Total volym:', totalVolume, 'kg');
+    alert(`Kunde inte spara passet: ${error.message}`);
+    return false;
   }
+
+  showCompletionModal(totalVolume);
+  return true;
 };
 
 const showCompletionModal = (totalVolume: number) => {
@@ -394,7 +399,7 @@ const showCompletionModal = (totalVolume: number) => {
       
       <div class="volume-box">
         <p>Total Volym</p>
-        <h3>${totalVolume} kg</h3>
+        <h3 class="slot-machine">0 kg</h3>
       </div>
       
       <p class="modal-footer">Starkt jobbat, fortsätt så!</p>
@@ -403,6 +408,32 @@ const showCompletionModal = (totalVolume: number) => {
   `;
   
   document.body.appendChild(modal);
+  
+  // Slot machine animation för volym
+  const volumeDisplay = modal.querySelector('.slot-machine') as HTMLElement;
+  if (volumeDisplay) {
+    volumeDisplay.classList.add('animating'); // Lägg på animationen
+    const duration = 1000; // ms
+    const startTime = Date.now();
+    const animate = () => {
+      const elapsed = Date.now() - startTime;
+      const progress = Math.min(elapsed / duration, 1);
+      const currentValue = Math.floor(progress * totalVolume);
+      volumeDisplay.textContent = `${currentValue} kg`;
+      
+      if (progress < 1) {
+        requestAnimationFrame(animate);
+      } else {
+        volumeDisplay.textContent = `${totalVolume} kg`;
+        volumeDisplay.classList.remove('animating'); // Ta bort animationen när den är klar
+        volumeDisplay.classList.add('expand'); // Lägg på expand-animationen
+        setTimeout(() => {
+          volumeDisplay.classList.remove('expand');
+        }, 600); // Duration av expand-animationen
+      }
+    };
+    animate();
+  }
   
   modal.querySelector('.modal-btn')?.addEventListener('click', () => {
     modal.remove();
@@ -479,17 +510,17 @@ startWorkoutBtn?.addEventListener("click", async (_e: MouseEvent) => {
 });
 
 finishWorkoutBtn?.addEventListener("click", async (_e: MouseEvent) => {
-    if (currentWorkoutId) {
-        await logWorkoutCompletion(currentWorkoutId);
-        
-        // Nollställ checkboxar
-        exercises.forEach(ex => {
-            ex.isDone = false;
-        });
-        await supabase.from('exercises').update({ is_done: false }).eq('workout_id', currentWorkoutId);
-        renderExercises();
-    }
-    goToDashboard();
+  if (currentWorkoutId) {
+    const ok = await logWorkoutCompletion(currentWorkoutId);
+    if (!ok) return; // avbryt om loggning misslyckas eller volymen är 0
+
+    exercises.forEach(ex => {
+      ex.isDone = false;
+    });
+    await supabase.from('exercises').update({ is_done: false }).eq('workout_id', currentWorkoutId);
+    renderExercises();
+  }
+  goToDashboard();
 });
 
 workoutForm?.addEventListener("submit", async (e: SubmitEvent) => {
