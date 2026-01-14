@@ -195,6 +195,7 @@ const showStatistics = async () => {
 
 // Ladda workout logs från databasen
 const loadWorkoutLogs = async () => {
+  if (!myUserId) return;
   const { data, error } = await supabase
     .from('workout_logs')
     .select('*, workouts(name)')
