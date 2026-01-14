@@ -44,7 +44,10 @@ interface WorkoutLogRow {
   workouts: {
     name: string;
     user_id: string;
-  };
+  } | {
+    name: string;
+    user_id: string;
+  }[];
 }
 
 // --- 3. DOM ELEMENT ---
@@ -261,9 +264,12 @@ const loadWorkoutLogs = async () => {
       const logItem = document.createElement('li');
       logItem.className = 'log-item';
       const dateOnly = log.completed_at ? log.completed_at.split('T')[0] : 'Inget datum';
+      const workoutName = Array.isArray(log.workouts) 
+        ? log.workouts[0]?.name || 'Okänt Pass'
+        : log.workouts?.name || 'Okänt Pass';
       logItem.innerHTML = `
         <div class="log-info">
-          <div class="log-name">${log.workouts?.name || 'Okänt Pass'}</div>
+          <div class="log-name">${workoutName}</div>
           <div class="log-date">${dateOnly}</div>
         </div>
         <div class="log-volume">${log.total_volume || 0} kg</div>
