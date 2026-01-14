@@ -196,11 +196,15 @@ const showStatistics = async () => {
 
 // Ladda workout logs från databasen
 const loadWorkoutLogs = async () => {
-  if (!myUserId) return;
+  if (!myUserId) {
+    console.warn('Ingen användare inloggad');
+    workoutLogsList.innerHTML = '<li>Du måste vara inloggad.</li>';
+    return;
+  }
+  
   const { data, error } = await supabase
     .from('workout_logs')
-    .select('id, workout_id, total_volume, completed_at, workouts!inner(name, user_id)')
-    .eq('workouts.user_id', myUserId)
+    .select('id, workout_id, total_volume, completed_at, workouts(name, user_id)')
     .order('completed_at', { ascending: false })
     .limit(20);
 
@@ -209,6 +213,8 @@ const loadWorkoutLogs = async () => {
     workoutLogsList.innerHTML = '<li>Kunde inte hämta loggar.</li>';
     return;
   }
+
+  console.log(`Laddar loggar för användare ${myUserId}:`, data);
 
   // Beräkna statistik för olika tidsperioder
   const now = new Date();
