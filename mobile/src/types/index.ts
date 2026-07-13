@@ -1,0 +1,49 @@
+export interface Workout {
+  id: string;
+  user_id: string;
+  name: string;
+  created_at: string;
+  completed_at?: string; // Optional if not yet completed
+  is_archived?: boolean;
+  is_deleted?: boolean;
+}
+
+// Represents an exercise in a user's workout
+export interface WorkoutExercise {
+  id: string;
+  workout_id: string;
+  exercise_id: string;
+  sets: number;
+  reps: number;
+  weight: number;
+  isDone: boolean; // mapped from is_done
+  custom_name?: string;
+  notes?: string;
+  created_at?: string;
+  order_index?: number;
+}
+
+export interface ExerciseLibrary {
+  id: string;
+  name: string;
+  muscle_group?: string;
+  link?: string;
+  gifUrl?: string;
+}
+
+export interface Bookmark {
+  id: string;
+  user_id: string;
+  exercise_id: string;
+  created_at: string;
+}
+
+export interface WorkoutLog {
+  id: string;
+  workout_id: string;
+  user_id: string;
+  workout_name: string;
+  total_volume: number;
+  completed_at: string;
+}
+
