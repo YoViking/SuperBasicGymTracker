@@ -49,7 +49,8 @@ export default function WorkoutPlayer({
   };
 
   const [restTimerActive, setRestTimerActive] = useState(false);
-  const [restTimerSeconds, setRestTimerSeconds] = useState(60);
+  const [restTimerSeconds, setRestTimerSeconds] = useState(30);
+  const [restTimerMax, setRestTimerMax] = useState(30);
   const [sound, setSound] = useState<Audio.Sound | null>(null);
 
   async function playSound() {
@@ -120,11 +121,16 @@ export default function WorkoutPlayer({
   }, [restTimerActive]);
 
   const toggleRestTimer = () => {
-    if (restTimerActive) {
-      setRestTimerActive(false);
-    } else {
-      setRestTimerSeconds(60);
+    if (!restTimerActive) {
+      setRestTimerSeconds(30);
+      setRestTimerMax(30);
       setRestTimerActive(true);
+    } else {
+      setRestTimerSeconds(prev => {
+        const next = prev + 30;
+        setRestTimerMax(next);
+        return next;
+      });
     }
   };
 
@@ -217,7 +223,7 @@ export default function WorkoutPlayer({
                 <View 
                   style={[
                     styles.progressBarFill, 
-                    { width: restTimerActive ? `${(restTimerSeconds / 60) * 100}%` : `${progressPercentage}%` },
+                    { width: restTimerActive ? `${(restTimerSeconds / restTimerMax) * 100}%` : `${progressPercentage}%` },
                     restTimerActive && { backgroundColor: '#A3E635' }
                   ]} 
                 />
