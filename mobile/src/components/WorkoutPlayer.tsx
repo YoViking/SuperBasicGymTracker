@@ -134,6 +134,13 @@ export default function WorkoutPlayer({
     }
   };
 
+  const resetRestTimer = () => {
+    if (restTimerActive) {
+      setRestTimerActive(false);
+      setRestTimerSeconds(30);
+    }
+  };
+
   const formatTime = (seconds: number) => {
     const m = Math.floor(seconds / 60);
     const s = seconds % 60;
@@ -248,7 +255,12 @@ export default function WorkoutPlayer({
                 </TouchableOpacity>
               </View>
 
-              <TouchableOpacity style={styles.timerBtn} onPress={toggleRestTimer}>
+              <TouchableOpacity 
+                style={styles.timerBtn} 
+                onPress={toggleRestTimer}
+                onLongPress={resetRestTimer}
+                delayLongPress={500}
+              >
                 <Timer size={28} color={restTimerActive ? "#A3E635" : "#F8FAFC"} />
               </TouchableOpacity>
             </View>
