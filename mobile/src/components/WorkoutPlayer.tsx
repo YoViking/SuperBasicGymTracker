@@ -3,7 +3,18 @@ import { View, Text, StyleSheet, TouchableOpacity, Modal, Dimensions, Platform, 
 import { Image } from 'expo-image';
 import { Play, Pause, SkipForward, SkipBack, Timer, MoreHorizontal, Check, ChevronDown } from 'lucide-react-native';
 import { Audio } from 'expo-av';
+import * as Notifications from 'expo-notifications';
 import { getMuscleGroupImage } from '../utils/images';
+
+Notifications.setNotificationHandler({
+  handleNotification: async () => ({
+    shouldShowAlert: false, // Don't show alert if the app is in the foreground
+    shouldPlaySound: false, // Don't play notification sound if in foreground
+    shouldSetBadge: false,
+    shouldShowBanner: false,
+    shouldShowList: false,
+  }),
+});
 
 const { width, height } = Dimensions.get('window');
 
@@ -37,7 +48,7 @@ export default function WorkoutPlayer({
   // When a set is checked off, we handle it
   const handleToggleSet = (setId: string, currentStatus: boolean) => {
     onToggleSet(setId, currentStatus);
-    
+
     // Check if all sets are now done
     const allWillBeDone = activeExercise.sets.every((s: any) => s.id === setId ? true : s.is_done);
     if (allWillBeDone && !currentStatus) {
@@ -52,6 +63,7 @@ export default function WorkoutPlayer({
   const [restTimerSeconds, setRestTimerSeconds] = useState(30);
   const [restTimerMax, setRestTimerMax] = useState(30);
   const [sound, setSound] = useState<Audio.Sound | null>(null);
+  const scheduledNotificationIdRef = useRef<string | null>(null);
 
   async function playSound() {
     try {
@@ -65,11 +77,73 @@ export default function WorkoutPlayer({
     }
   }
 
+  const scheduleNotification = async (seconds: number) => {
+    try {
+      const { status: existingStatus } = await Notifications.getPermissionsAsync();
+      let finalStatus = existingStatus;
+      if (existingStatus !== 'granted') {
+        const { status } = await Notifications.requestPermissionsAsync();
+        finalStatus = status;
+      }
+      if (finalStatus !== 'granted') {
+        return;
+      }
+
+      if (scheduledNotificationIdRef.current) {
+        await Notifications.cancelScheduledNotificationAsync(scheduledNotificationIdRef.current);
+      }
+
+      const id = await Notifications.scheduleNotificationAsync({
+        content: {
+          title: "Rest Time Over!",
+          body: `Time for your next set of ${activeExercise?.exerciseName || 'exercise'}!`,
+          sound: true,
+        },
+        trigger: {
+          type: Notifications.SchedulableTriggerInputTypes.TIME_INTERVAL,
+          seconds,
+        },
+      });
+      scheduledNotificationIdRef.current = id;
+    } catch (e) {
+      console.log('Error scheduling notification', e);
+    }
+  };
+
+  const cancelNotification = async () => {
+    try {
+      if (scheduledNotificationIdRef.current) {
+        await Notifications.cancelScheduledNotificationAsync(scheduledNotificationIdRef.current);
+        scheduledNotificationIdRef.current = null;
+      }
+    } catch (e) {
+      console.log('Error canceling notification', e);
+    }
+  };
+
+  useEffect(() => {
+    const requestNotificationPermission = async () => {
+      try {
+        const { status } = await Notifications.getPermissionsAsync();
+        if (status !== 'granted') {
+          await Notifications.requestPermissionsAsync();
+        }
+      } catch (e) {
+        console.log('Error requesting notification permission', e);
+      }
+    };
+    requestNotificationPermission();
+
+    return () => {
+      cancelNotification();
+    };
+  }, []);
+
   useEffect(() => {
     return sound
       ? () => {
-          sound.unloadAsync();
-        }
+        sound.unloadAsync();
+      }
       : undefined;
   }, [sound]);
 
@@ -83,6 +157,7 @@ export default function WorkoutPlayer({
       // Timer finished!
       setRestTimerActive(false);
       playSound();
+      cancelNotification();
     }
     return () => clearInterval(interval);
   }, [restTimerActive, restTimerSeconds]);
@@ -103,6 +178,7 @@ export default function WorkoutPlayer({
             if (remaining <= 0) {
               setRestTimerActive(false);
               playSound();
+              cancelNotification();
               return 0;
             }
             return remaining;
@@ -125,10 +201,12 @@ export default function WorkoutPlayer({
       setRestTimerSeconds(30);
       setRestTimerMax(30);
       setRestTimerActive(true);
+      scheduleNotification(30);
     } else {
       setRestTimerSeconds(prev => {
         const next = prev + 30;
         setRestTimerMax(next);
+        scheduleNotification(next);
         return next;
       });
     }
@@ -138,6 +216,7 @@ export default function WorkoutPlayer({
     if (restTimerActive) {
       setRestTimerActive(false);
       setRestTimerSeconds(30);
+      cancelNotification();
     }
   };
 
@@ -153,8 +232,8 @@ export default function WorkoutPlayer({
     <>
       {/* Folded Mini Player */}
       {!isExpanded && (
-        <TouchableOpacity 
-          style={styles.miniPlayer} 
+        <TouchableOpacity
+          style={styles.miniPlayer}
           activeOpacity={0.9}
           onPress={() => setIsExpanded(true)}
         >
@@ -187,16 +266,16 @@ export default function WorkoutPlayer({
           </TouchableOpacity>
 
           {activeExercise.gifUrl ? (
-            <Image 
-              source={{ uri: activeExercise.gifUrl }} 
-              style={styles.largeImage} 
+            <Image
+              source={{ uri: activeExercise.gifUrl }}
+              style={styles.largeImage}
               contentFit="cover"
               autoplay={isWorkoutActive}
             />
           ) : (
-            <Image 
-              source={getMuscleGroupImage(activeExercise.muscleGroup)} 
-              style={styles.largeImage} 
+            <Image
+              source={getMuscleGroupImage(activeExercise.muscleGroup)}
+              style={styles.largeImage}
               contentFit="contain"
               autoplay={false}
             />
@@ -204,12 +283,12 @@ export default function WorkoutPlayer({
 
           <ScrollView style={styles.exerciseDetails} contentContainerStyle={{ paddingBottom: 24 }}>
             <Text style={styles.modalTitle}>{activeExercise.exerciseName}</Text>
-            
+
             <View style={styles.setsContainer}>
               {activeExercise.sets.map((set: any) => (
                 <View key={set.id} style={styles.setRow}>
-                  <TouchableOpacity 
-                    style={[styles.checkbox, set.is_done && styles.checkboxChecked]} 
+                  <TouchableOpacity
+                    style={[styles.checkbox, set.is_done && styles.checkboxChecked]}
                     onPress={() => handleToggleSet(set.id, set.is_done)}
                     activeOpacity={0.7}
                   >
@@ -227,12 +306,12 @@ export default function WorkoutPlayer({
           <View style={styles.playerBottom}>
             <View style={styles.progressContainer}>
               <View style={styles.progressBarBg}>
-                <View 
+                <View
                   style={[
-                    styles.progressBarFill, 
+                    styles.progressBarFill,
                     { width: restTimerActive ? `${(restTimerSeconds / restTimerMax) * 100}%` : `${progressPercentage}%` },
                     restTimerActive && { backgroundColor: '#A3E635' }
-                  ]} 
+                  ]}
                 />
               </View>
               <Text style={styles.timeText}>
@@ -245,18 +324,18 @@ export default function WorkoutPlayer({
                 <TouchableOpacity onPress={onPrevious}>
                   <SkipBack size={36} color="#F8FAFC" fill="#F8FAFC" />
                 </TouchableOpacity>
-                
+
                 <TouchableOpacity onPress={() => setIsWorkoutActive(!isWorkoutActive)} style={styles.playButton}>
                   {isWorkoutActive ? <Pause size={48} color="#0A0A0A" /> : <Play size={48} color="#0A0A0A" fill="#0A0A0A" />}
                 </TouchableOpacity>
-                
+
                 <TouchableOpacity onPress={onNext}>
                   <SkipForward size={36} color="#F8FAFC" fill="#F8FAFC" />
                 </TouchableOpacity>
               </View>
 
-              <TouchableOpacity 
-                style={styles.timerBtn} 
+              <TouchableOpacity
+                style={styles.timerBtn}
                 onPress={toggleRestTimer}
                 onLongPress={resetRestTimer}
                 delayLongPress={500}

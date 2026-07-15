@@ -1,9 +1,13 @@
 import { Stack, useRouter, useSegments } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { useFonts, Bangers_400Regular } from '@expo-google-fonts/bangers';
-import { ActivityIndicator, View } from 'react-native';
+import { ActivityIndicator, View, LogBox } from 'react-native';
 import { AuthProvider, useAuth } from '../src/context/AuthContext';
 import { useEffect } from 'react';
+
+LogBox.ignoreLogs([
+  'Android Push notifications (remote notifications) functionality',
+]);
 
 function RootLayoutNav() {
   const { session, loading } = useAuth();
