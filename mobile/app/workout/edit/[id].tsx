@@ -1,5 +1,6 @@
 import React, { useState, useCallback, useMemo } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, ActivityIndicator, Platform, ToastAndroid, Image, Dimensions, TextInput } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, ActivityIndicator, Platform, ToastAndroid, Dimensions, TextInput } from 'react-native';
+import { Image } from 'expo-image';
 import { useLocalSearchParams, useRouter, useFocusEffect } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { ArrowLeft, GripVertical, Edit2 } from 'lucide-react-native';
@@ -24,6 +25,7 @@ interface FetchedWorkoutExercise {
   exercise: {
     name: string;
     muscle_group: string;
+    gifUrl?: string;
   };
 }
 
@@ -31,6 +33,7 @@ interface GroupedExercise {
   exerciseId: string;
   exerciseName: string;
   muscleGroup: string;
+  gifUrl?: string;
   sets: FetchedWorkoutExercise[];
   order_index: number;
 }
@@ -67,7 +70,7 @@ export default function WorkoutEditScreen() {
         .from('workout_exercises')
         .select(`
           *,
-          exercise:exercise_library(name, muscle_group)
+          exercise:exercise_library(name, muscle_group, "gifUrl")
         `)
         .eq('workout_id', id)
         .order('order_index', { ascending: true })
@@ -83,6 +86,7 @@ export default function WorkoutEditScreen() {
             exerciseId: row.exercise_id,
             exerciseName: row.exercise.name,
             muscleGroup: row.exercise.muscle_group,
+            gifUrl: row.exercise.gifUrl,
             sets: [],
             order_index: row.order_index ?? 0
           };
@@ -140,8 +144,9 @@ export default function WorkoutEditScreen() {
 
   const collageImages = useMemo(() => {
     if (groupedExercises.length === 0) return [];
-    const uniqueGroups = Array.from(new Set(groupedExercises.map(g => g.muscleGroup)));
-    let images = uniqueGroups.map(mg => getMuscleGroupImage(mg));
+    let images = groupedExercises.slice(0, 4).map(g => 
+      g.gifUrl ? { uri: g.gifUrl } : getMuscleGroupImage(g.muscleGroup)
+    );
     
     while (images.length > 0 && images.length < 4) {
       images = [...images, ...images];
@@ -207,7 +212,11 @@ export default function WorkoutEditScreen() {
           activeOpacity={0.9}
         >
           <View style={styles.cardLeft}>
-             <Image source={getMuscleGroupImage(group.muscleGroup)} style={styles.thumbnail} />
+            {group.gifUrl ? (
+              <Image source={{ uri: group.gifUrl }} style={styles.thumbnail} contentFit="cover" autoplay={false} />
+            ) : (
+              <Image source={getMuscleGroupImage(group.muscleGroup)} style={styles.thumbnail} contentFit="contain" autoplay={false} />
+            )}
           </View>
           <View style={styles.cardRight}>
             <View style={styles.cardTopRow}>
@@ -353,8 +362,6 @@ const styles = StyleSheet.create({
   },
   cardLeft: {
     width: 80,
-    backgroundColor: '#F8FAFC',
-    alignItems: 'center',
   },
   thumbnail: {
     width: 80,

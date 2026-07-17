@@ -319,10 +319,12 @@ export default function WorkoutDetailScreen() {
   // Collage Logic
   const collageImages = useMemo(() => {
     if (groupedExercises.length === 0) return [];
-    const uniqueGroups = Array.from(new Set(groupedExercises.map(g => g.muscleGroup)));
-    let images = uniqueGroups.map(mg => getMuscleGroupImage(mg));
     
-    // Fill to 4 slots by repeating
+    let images = groupedExercises.slice(0, 4).map(g => 
+      g.gifUrl ? { uri: g.gifUrl } : getMuscleGroupImage(g.muscleGroup)
+    );
+    
+    // Fill to 4 slots by repeating if there are fewer than 4 exercises
     while (images.length > 0 && images.length < 4) {
       images = [...images, ...images];
     }

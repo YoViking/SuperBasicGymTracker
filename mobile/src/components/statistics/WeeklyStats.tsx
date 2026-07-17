@@ -51,52 +51,55 @@ export default function WeeklyStats() {
 
   return (
     <View style={styles.container}>
-      {/* Days of the week circles */}
-      <View style={styles.daysRow}>
-        {daysOfWeek.map((day, index) => (
-          <View key={day} style={styles.dayContainer}>
-            <Text style={styles.dayLabel}>{day}</Text>
-            <View style={[styles.dayCircle, stats.daysCompleted[index] && styles.dayCircleCompleted]} />
-          </View>
-        ))}
-      </View>
+      {/* Top Grey Card */}
+      <View style={styles.topCard}>
+        {/* Days of the week circles */}
+        <View style={styles.daysRow}>
+          {daysOfWeek.map((day, index) => (
+            <View key={day} style={styles.dayContainer}>
+              <Text style={styles.dayLabel}>{day}</Text>
+              <View style={[styles.dayCircle, stats.daysCompleted[index] && styles.dayCircleCompleted]} />
+            </View>
+          ))}
+        </View>
 
-      {/* Stats List */}
-      <View style={styles.statsList}>
-        <Text style={styles.antalPassText}>Antal pass: {stats.completedThisWeekCount}/{stats.activeWorkoutsCount}</Text>
-        
-        <StatRow 
-          label="Total tid" 
-          value={formatTime(stats.currentWeekTime)} 
-          percentageChange={timeChange}
-        />
-        
-        <StatRow 
-          label="Total volym" 
-          value={`${stats.currentWeekVolume} kg`} 
-          percentageChange={volumeChange}
-        />
-      </View>
+        {/* Stats List */}
+        <View style={styles.statsList}>
+          <Text style={styles.antalPassText}>Antal pass: {stats.completedThisWeekCount}/{stats.activeWorkoutsCount}</Text>
+          
+          <StatRow 
+            label="Total tid" 
+            value={formatTime(stats.currentWeekTime)} 
+            percentageChange={timeChange}
+          />
+          
+          <StatRow 
+            label="Total volym" 
+            value={`${stats.currentWeekVolume} kg`} 
+            percentageChange={volumeChange}
+          />
+        </View>
 
-      {/* Line Chart */}
-      <View style={styles.chartContainer}>
-        <LineChart
-          data={chartData}
-          width={width - 80}
-          height={160}
-          thickness={2}
-          color="#F8FAFC"
-          noOfSections={4}
-          hideRules
-          hideYAxisText
-          yAxisColor="transparent"
-          xAxisColor="#F8FAFC"
-          xAxisThickness={1}
-          dataPointsColor="#A3E635"
-          dataPointsRadius={4}
-          hideDataPoints={false}
-          isAnimated
-        />
+        {/* Line Chart */}
+        <View style={styles.chartContainer}>
+          <LineChart
+            data={chartData}
+            width={width - 80}
+            height={160}
+            thickness={2}
+            color="#F8FAFC"
+            noOfSections={4}
+            hideRules
+            hideYAxisText
+            yAxisColor="transparent"
+            xAxisColor="#F8FAFC"
+            xAxisThickness={1}
+            dataPointsColor="#A3E635"
+            dataPointsRadius={4}
+            hideDataPoints={false}
+            isAnimated
+          />
+        </View>
       </View>
 
       {/* Rewarding Badge */}
@@ -132,6 +135,14 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
     minHeight: 200,
+  },
+  topCard: {
+    backgroundColor: '#2D3039',
+    borderRadius: 8,
+    paddingTop: 16,
+    paddingBottom: 24,
+    marginBottom: 32,
+    marginHorizontal: 8,
   },
   daysRow: {
     flexDirection: 'row',

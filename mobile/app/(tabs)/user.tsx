@@ -4,6 +4,7 @@ import { supabase } from '../../src/lib/supabase';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import WeeklyStats from '../../src/components/statistics/WeeklyStats';
 import MonthlyStats from '../../src/components/statistics/MonthlyStats';
+import YearlyStats from '../../src/components/statistics/YearlyStats';
 
 const { width } = Dimensions.get('window');
 const TABS = ['Veckan', 'Månad', 'År'];
@@ -76,9 +77,9 @@ export default function UserScreen() {
         </View>
 
         <View style={styles.page}>
-          <View style={styles.placeholderContainer}>
-             <Text style={styles.placeholderText}>År - Kommer snart</Text>
-          </View>
+          <ScrollView contentContainerStyle={styles.scrollContent}>
+             <YearlyStats />
+          </ScrollView>
         </View>
       </ScrollView>
 

@@ -1,9 +1,12 @@
-import React, { useEffect, useState } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, TextInput, ActivityIndicator, ScrollView, Platform, ToastAndroid, Linking } from 'react-native';
+import React, { useEffect, useState, useRef } from 'react';
+import { View, Text, StyleSheet, TouchableOpacity, TextInput, ActivityIndicator, ScrollView, Platform, ToastAndroid, Linking, Dimensions, KeyboardAvoidingView } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { ArrowLeft, Plus, Minus } from 'lucide-react-native';
 import { supabase } from '../../../../src/lib/supabase';
+import ExerciseStats from '../../../../src/components/statistics/ExerciseStats';
+
+const { width } = Dimensions.get('window');
 
 interface ExerciseSet {
   id: string;
@@ -18,6 +21,13 @@ export default function WorkoutExerciseDetailScreen() {
 
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [activeTab, setActiveTab] = useState(0);
+  const scrollViewRef = useRef<ScrollView>(null);
+  
+  const handleTabPress = (index: number) => {
+    setActiveTab(index);
+    scrollViewRef.current?.scrollTo({ x: index * width, animated: true });
+  };
   
   const [setsData, setSetsData] = useState<ExerciseSet[]>([]);
   const [deletedSets, setDeletedSets] = useState<string[]>([]);
@@ -29,7 +39,7 @@ export default function WorkoutExerciseDetailScreen() {
 
   useEffect(() => {
     fetchData();
-  }, [workoutId, exerciseId]);
+  }, []);
 
   const fetchData = async () => {
     if (!workoutId || !exerciseId) return;
@@ -166,6 +176,33 @@ export default function WorkoutExerciseDetailScreen() {
 
   return (
     <SafeAreaView style={styles.safeArea}>
+      <KeyboardAvoidingView 
+        style={{ flex: 1 }} 
+        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+        enabled={Platform.OS === 'ios'}
+      >
+        {/* Custom Tabs */}
+      <View style={styles.tabsContainer}>
+        <TouchableOpacity
+          style={[styles.tabButton, activeTab === 0 && styles.activeTabButton]}
+          onPress={() => handleTabPress(0)}
+          activeOpacity={0.8}
+        >
+          <Text style={[styles.tabText, activeTab === 0 && styles.activeTabText]}>
+            Logga
+          </Text>
+        </TouchableOpacity>
+        <TouchableOpacity
+          style={[styles.tabButton, activeTab === 1 && styles.activeTabButton]}
+          onPress={() => handleTabPress(1)}
+          activeOpacity={0.8}
+        >
+          <Text style={[styles.tabText, activeTab === 1 && styles.activeTabText]}>
+            Statistik
+          </Text>
+        </TouchableOpacity>
+      </View>
+
       <View style={styles.header}>
         <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
           <ArrowLeft size={24} color="#F8FAFC" />
@@ -173,9 +210,25 @@ export default function WorkoutExerciseDetailScreen() {
         <Text style={styles.headerTitle}>{originalName}</Text>
       </View>
 
-      <ScrollView style={styles.container} keyboardShouldPersistTaps="handled">
-        
-        {/* Main Editor Card */}
+      <ScrollView 
+        ref={scrollViewRef}
+        horizontal 
+        pagingEnabled 
+        keyboardShouldPersistTaps="always"
+        showsHorizontalScrollIndicator={false}
+        onMomentumScrollEnd={(e) => {
+          const newIndex = Math.round(e.nativeEvent.contentOffset.x / width);
+          if (newIndex !== activeTab) {
+            setActiveTab(newIndex);
+          }
+        }}
+        scrollEventThrottle={16}
+        style={styles.swipeContainer}
+      >
+        {/* Logga Tab */}
+        <View style={styles.page}>
+          <ScrollView style={styles.container} keyboardShouldPersistTaps="always" contentContainerStyle={{ paddingBottom: 40 }}>
+            {/* Main Editor Card */}
         <View style={styles.card}>
           <TextInput
             style={styles.nameInput}
@@ -287,8 +340,18 @@ export default function WorkoutExerciseDetailScreen() {
           />
         </View>
         
-        <View style={{ height: 40 }} />
+          </ScrollView>
+        </View>
+
+        {/* Statistik Tab */}
+        <View style={styles.page}>
+          <ScrollView style={styles.container} contentContainerStyle={{ paddingBottom: 40 }}>
+            <ExerciseStats exerciseName={originalName} />
+          </ScrollView>
+        </View>
+
       </ScrollView>
+      </KeyboardAvoidingView>
     </SafeAreaView>
   );
 }
@@ -297,6 +360,30 @@ const styles = StyleSheet.create({
   safeArea: {
     flex: 1,
     backgroundColor: '#0A0A0A',
+  },
+  tabsContainer: {
+    flexDirection: 'row',
+    paddingHorizontal: 16,
+    paddingTop: 16,
+    gap: 8,
+  },
+  tabButton: {
+    flex: 1,
+    paddingVertical: 10,
+    backgroundColor: '#F8FAFC', // white for inactive
+    borderRadius: 4,
+    alignItems: 'center',
+  },
+  activeTabButton: {
+    backgroundColor: '#A3E635', // Green for active
+  },
+  tabText: {
+    color: '#0A0A0A',
+    fontSize: 14,
+    fontWeight: '600',
+  },
+  activeTabText: {
+    color: '#0A0A0A',
   },
   header: {
     flexDirection: 'row',
@@ -313,6 +400,13 @@ const styles = StyleSheet.create({
     fontSize: 20,
     fontWeight: '700',
     color: '#A3E635',
+  },
+  swipeContainer: {
+    flex: 1,
+  },
+  page: {
+    width: width,
+    flex: 1,
   },
   container: {
     flex: 1,

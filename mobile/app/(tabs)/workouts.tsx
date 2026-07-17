@@ -2,12 +2,13 @@ import React from 'react';
 import { View, Text, StyleSheet } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import SavedWorkouts from '../../src/components/SavedWorkouts';
+import TrackLogo from '../../src/components/TrackLogo';
 
 export default function WorkoutsScreen() {
   return (
     <SafeAreaView style={styles.safeArea} edges={['top']}>
       <View style={styles.header}>
-        <Text style={styles.logoText}>The Incredible Hulk App </Text>
+        <TrackLogo />
       </View>
       <View style={styles.container}>
         <SavedWorkouts />

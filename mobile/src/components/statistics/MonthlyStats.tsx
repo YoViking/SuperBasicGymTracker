@@ -34,7 +34,9 @@ export default function MonthlyStats() {
     }
 
     for (let day = 1; day <= daysInMonth; day++) {
-      const dateStr = new Date(year, month, day).toISOString().split('T')[0];
+      const mStr = String(month + 1).padStart(2, '0');
+      const dStr = String(day).padStart(2, '0');
+      const dateStr = `${year}-${mStr}-${dStr}`;
       const dayData = stats.heatmapData.find(d => d.date === dateStr);
       const volume = dayData ? dayData.count : 0;
 
