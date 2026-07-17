@@ -82,7 +82,13 @@ export default function WorkoutPlayer({
       const { status: existingStatus } = await Notifications.getPermissionsAsync();
       let finalStatus = existingStatus;
       if (existingStatus !== 'granted') {
-        const { status } = await Notifications.requestPermissionsAsync();
+        const { status } = await Notifications.requestPermissionsAsync({
+          ios: {
+            allowAlert: true,
+            allowBadge: false,
+            allowSound: true,
+          },
+        });
         finalStatus = status;
       }
       if (finalStatus !== 'granted') {
@@ -102,6 +108,7 @@ export default function WorkoutPlayer({
         trigger: {
           type: Notifications.SchedulableTriggerInputTypes.TIME_INTERVAL,
           seconds,
+          channelId: 'rest-timer',
         },
       });
       scheduledNotificationIdRef.current = id;
@@ -126,7 +133,22 @@ export default function WorkoutPlayer({
       try {
         const { status } = await Notifications.getPermissionsAsync();
         if (status !== 'granted') {
-          await Notifications.requestPermissionsAsync();
+          await Notifications.requestPermissionsAsync({
+            ios: {
+              allowAlert: true,
+              allowBadge: false,
+              allowSound: true,
+            },
+          });
+        }
+
+        if (Platform.OS === 'android') {
+          await Notifications.setNotificationChannelAsync('rest-timer', {
+            name: 'Rest Timer Alerts',
+            importance: Notifications.AndroidImportance.MAX,
+            vibrationPattern: [0, 250, 250, 250],
+            lightColor: '#A3E635',
+          });
         }
       } catch (e) {
         console.log('Error requesting notification permission', e);

@@ -43,7 +43,8 @@ export interface WorkoutLog {
   workout_id: string;
   user_id: string;
   workout_name: string;
+  duration_seconds: number;
   total_volume: number;
-  completed_at: string;
+  created_at: string;
 }
 
