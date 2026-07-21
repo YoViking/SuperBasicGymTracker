@@ -2,12 +2,16 @@ import React, { useEffect, useState } from 'react';
 import { View, Text, StyleSheet, FlatList, ActivityIndicator, TouchableOpacity, Platform, ToastAndroid } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter, useLocalSearchParams } from 'expo-router';
-import { ArrowLeft, MoreVertical } from 'lucide-react-native';
+import { ArrowLeft, MoreVertical, Pencil } from 'lucide-react-native';
 import { supabase } from '../../src/lib/supabase';
 import { Workout, Folder } from '../../src/types';
 import WorkoutMenuModal from '../../src/components/WorkoutMenuModal';
 import MoveToFolderModal from '../../src/components/MoveToFolderModal';
 import CreateFolderModal from '../../src/components/CreateFolderModal';
+import EditFolderModal from '../../src/components/EditFolderModal';
+import { Image } from 'expo-image';
+import { getMuscleGroupImage } from '../../src/utils/images';
+import { decode } from 'base64-arraybuffer';
 
 export default function FolderScreen() {
   const router = useRouter();
@@ -22,7 +26,10 @@ export default function FolderScreen() {
   const [menuVisible, setMenuVisible] = useState(false);
   const [moveModalVisible, setMoveModalVisible] = useState(false);
   const [createModalVisible, setCreateModalVisible] = useState(false);
+  const [editModalVisible, setEditModalVisible] = useState(false);
   const [selectedWorkout, setSelectedWorkout] = useState<Workout | null>(null);
+
+  const currentFolder = folders.find(f => f.id === folderId) || null;
 
   useEffect(() => {
     if (folderId) {
@@ -46,7 +53,17 @@ export default function FolderScreen() {
 
       const { data, error } = await supabase
         .from('workouts')
-        .select('*')
+        .select(`
+          *,
+          workout_exercises (
+            order_index,
+            created_at,
+            exercise:exercise_library (
+              gifUrl,
+              muscle_group
+            )
+          )
+        `)
         .or('is_deleted.is.null,is_deleted.eq.false')
         .eq('folder_id', folderId)
         .order('created_at', { ascending: false });
@@ -107,8 +124,7 @@ export default function FolderScreen() {
       if (newFolderId !== folderId) {
          setWorkouts(prev => prev.filter(w => w.id !== selectedWorkout.id));
       }
-      
-      if (Platform.OS === 'android') ToastAndroid.show('Flyttad till mapp', ToastAndroid.SHORT);
+      if (Platform.OS === 'android') ToastAndroid.show('Flyttad till program', ToastAndroid.SHORT);
       setMoveModalVisible(false);
       setSelectedWorkout(null);
     } catch (e: any) {
@@ -116,14 +132,33 @@ export default function FolderScreen() {
     }
   };
 
-  const handleCreateFolder = async (folderName: string) => {
+  const handleCreateFolder = async (folderName: string, description: string, imageBase64: string | null) => {
     try {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) return;
 
+      let image_url = null;
+      if (imageBase64) {
+        const fileName = `${user.id}/${Date.now()}.jpg`;
+        const { error: uploadError } = await supabase.storage
+          .from('program-images')
+          .upload(fileName, decode(imageBase64), {
+            contentType: 'image/jpeg',
+          });
+
+        if (uploadError) {
+          console.error('Error uploading image:', uploadError);
+        } else {
+          const { data: publicUrlData } = supabase.storage
+            .from('program-images')
+            .getPublicUrl(fileName);
+          image_url = publicUrlData.publicUrl;
+        }
+      }
+
       const { data, error } = await supabase
         .from('folders')
-        .insert([{ name: folderName, user_id: user.id }])
+        .insert([{ name: folderName, description, image_url, user_id: user.id }])
         .select()
         .single();
         
@@ -140,8 +175,79 @@ export default function FolderScreen() {
     }
   };
 
+  const handleSaveFolder = async (newName: string, newDescription: string, imageBase64: string | null, imageDeleted: boolean) => {
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return;
+
+      let image_url = currentFolder?.image_url || null;
+
+      if (imageDeleted) {
+        image_url = null;
+      } else if (imageBase64) {
+        const fileName = `${user.id}/${Date.now()}.jpg`;
+        const { error: uploadError } = await supabase.storage
+          .from('program-images')
+          .upload(fileName, decode(imageBase64), {
+            contentType: 'image/jpeg',
+          });
+
+        if (uploadError) {
+          console.error('Error uploading image:', uploadError);
+        } else {
+          const { data: publicUrlData } = supabase.storage
+            .from('program-images')
+            .getPublicUrl(fileName);
+          image_url = publicUrlData.publicUrl;
+        }
+      }
+
+      const { error } = await supabase
+        .from('folders')
+        .update({ name: newName, description: newDescription, image_url })
+        .eq('id', folderId);
+
+      if (error) throw error;
+
+      // Update local state
+      setFolders(prev => prev.map(f => f.id === folderId ? { ...f, name: newName, description: newDescription, image_url } : f));
+      setEditModalVisible(false);
+      if (Platform.OS === 'android') ToastAndroid.show('Programmet har uppdaterats', ToastAndroid.SHORT);
+    } catch (e: any) {
+      console.error(e);
+      if (Platform.OS === 'android') ToastAndroid.show('Kunde inte uppdatera program', ToastAndroid.SHORT);
+    }
+  };
+
+  const getCollageImages = (workout: Workout) => {
+    const exercises = workout.workout_exercises || [];
+    const sorted = [...exercises].sort((a, b) => {
+      if (a.order_index !== b.order_index) {
+        return (a.order_index || 0) - (b.order_index || 0);
+      }
+      return new Date(a.created_at || 0).getTime() - new Date(b.created_at || 0).getTime();
+    });
+
+    let images = sorted.map((we) => {
+      const ex = we.exercise;
+      if (!ex) return null;
+      return ex.gifUrl ? { uri: ex.gifUrl } : getMuscleGroupImage(ex.muscle_group);
+    }).filter(Boolean) as any[];
+
+    if (images.length === 0) {
+      const fallback = getMuscleGroupImage(undefined);
+      images = [fallback, fallback, fallback, fallback];
+    }
+
+    while (images.length > 0 && images.length < 4) {
+      images = [...images, ...images];
+    }
+    return images.slice(0, 4);
+  };
+
   const renderWorkoutItem = ({ item }: { item: Workout }) => {
     const formattedDate = new Date(item.created_at).toISOString().split('T')[0];
+    const collage = getCollageImages(item);
     
     return (
       <TouchableOpacity 
@@ -149,6 +255,12 @@ export default function FolderScreen() {
         activeOpacity={0.7}
         onPress={() => router.push(`/workout/${item.id}`)}
       >
+        <View style={styles.collageGrid}>
+          <Image source={collage[0]} style={styles.collageImage} />
+          <Image source={collage[1]} style={styles.collageImage} />
+          <Image source={collage[2]} style={styles.collageImage} />
+          <Image source={collage[3]} style={styles.collageImage} />
+        </View>
         <View style={styles.workoutInfo}>
           <Text style={styles.workoutTitle}>{item.name}</Text>
           <Text style={styles.workoutDate}>{formattedDate}</Text>
@@ -160,13 +272,39 @@ export default function FolderScreen() {
     );
   };
 
+  const renderHeader = () => {
+    if (!currentFolder) return null;
+    return (
+      <View style={styles.programHeaderContainer}>
+        <View style={styles.imageWrapper}>
+          <TouchableOpacity activeOpacity={0.8} onPress={() => setEditModalVisible(true)} style={styles.programImageCard}>
+            {currentFolder.image_url ? (
+              <Image source={{ uri: currentFolder.image_url }} style={styles.programImage} contentFit="cover" />
+            ) : (
+              <View style={[styles.programImage, { backgroundColor: '#3F3F46' }]} />
+            )}
+            <View style={styles.imageOverlay}>
+              <Text style={styles.imageTitle}>{currentFolder.name.toUpperCase()}</Text>
+            </View>
+          </TouchableOpacity>
+          <TouchableOpacity style={styles.editIconWrapper} onPress={() => setEditModalVisible(true)}>
+            <Pencil size={14} color="#F8FAFC" />
+          </TouchableOpacity>
+        </View>
+        {currentFolder.description ? (
+          <Text style={styles.programDescription}>{currentFolder.description}</Text>
+        ) : null}
+      </View>
+    );
+  };
+
   return (
     <SafeAreaView style={styles.safeArea}>
       <View style={styles.header}>
         <TouchableOpacity style={styles.backButton} onPress={() => router.back()}>
           <ArrowLeft size={24} color="#F8FAFC" />
         </TouchableOpacity>
-        <Text style={styles.headerTitle}>{folderName || 'Mapp'}</Text>
+        <Text style={styles.headerTitle}>{currentFolder?.name || folderName || 'Program'}</Text>
       </View>
 
       <View style={styles.content}>
@@ -177,9 +315,10 @@ export default function FolderScreen() {
             data={workouts}
             keyExtractor={(item) => item.id.toString()}
             renderItem={renderWorkoutItem}
+            ListHeaderComponent={renderHeader}
             contentContainerStyle={styles.listContent}
             ListEmptyComponent={
-              <Text style={styles.emptyText}>Mappen är tom.</Text>
+              <Text style={styles.emptyText}>Programmet är tomt.</Text>
             }
           />
         )}
@@ -216,6 +355,13 @@ export default function FolderScreen() {
         onClose={() => setCreateModalVisible(false)}
         onCreate={handleCreateFolder}
       />
+
+      <EditFolderModal
+        visible={editModalVisible}
+        folder={currentFolder}
+        onClose={() => setEditModalVisible(false)}
+        onSave={handleSaveFolder}
+      />
     </SafeAreaView>
   );
 }
@@ -249,16 +395,31 @@ const styles = StyleSheet.create({
     paddingBottom: 40,
   },
   workoutCard: {
-    backgroundColor: '#3F3F46', // Matched to Figma
-    borderRadius: 8,
-    padding: 16,
+    backgroundColor: 'transparent',
+    paddingVertical: 12,
     marginBottom: 16,
     flexDirection: 'row',
-    justifyContent: 'space-between',
     alignItems: 'center',
+  },
+  collageGrid: {
+    width: 48,
+    height: 48,
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    borderRadius: 4,
+    overflow: 'hidden',
+    backgroundColor: '#18181B',
+  },
+  collageImage: {
+    width: 24,
+    height: 24,
+    backgroundColor: '#18181B',
+    borderWidth: 0.5,
+    borderColor: '#0A0A0A',
   },
   workoutInfo: {
     flex: 1,
+    marginLeft: 16,
   },
   workoutTitle: {
     fontSize: 16,
@@ -278,5 +439,59 @@ const styles = StyleSheet.create({
     color: '#94A3B8',
     textAlign: 'center',
     marginTop: 40,
+  },
+  programHeaderContainer: {
+    alignItems: 'center',
+    marginBottom: 24,
+    marginTop: 8,
+  },
+  imageWrapper: {
+    position: 'relative',
+    marginBottom: 8,
+  },
+  programImageCard: {
+    width: 160,
+    height: 160,
+    borderRadius: 24,
+    borderWidth: 2,
+    borderColor: '#FFFFFF',
+    overflow: 'hidden',
+  },
+  programImage: {
+    width: '100%',
+    height: '100%',
+  },
+  imageOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: 'rgba(0,0,0,0.15)',
+    justifyContent: 'flex-start',
+    alignItems: 'center',
+    paddingTop: 12,
+  },
+  imageTitle: {
+    color: '#FFFFFF',
+    fontSize: 16,
+    fontWeight: '900',
+    textAlign: 'center',
+    textShadowColor: 'rgba(0,0,0,0.8)',
+    textShadowOffset: { width: 0, height: 1 },
+    textShadowRadius: 3,
+  },
+  editIconWrapper: {
+    position: 'absolute',
+    bottom: 0,
+    right: -8,
+    backgroundColor: '#0A0A0A',
+    borderRadius: 16,
+    padding: 8,
+    borderWidth: 1,
+    borderColor: '#27272A',
+  },
+  programDescription: {
+    color: '#F8FAFC',
+    fontSize: 14,
+    fontWeight: '500',
+    textAlign: 'center',
+    marginTop: 4,
   },
 });

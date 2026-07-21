@@ -7,12 +7,22 @@ export interface Workout {
   is_archived?: boolean;
   is_deleted?: boolean;
   folder_id?: string | null;
+  workout_exercises?: Array<{
+    order_index?: number;
+    created_at?: string;
+    exercise?: {
+      gifUrl?: string;
+      muscle_group?: string;
+    } | null;
+  }>;
 }
 
 export interface Folder {
   id: string;
   user_id: string;
   name: string;
+  description?: string;
+  image_url?: string;
   created_at: string;
 }
 

@@ -33,7 +33,7 @@ export default function MoveToFolderModal({
           </View>
           
           <View style={styles.titleRow}>
-            <Text style={styles.title}>Flytta till mapp</Text>
+            <Text style={styles.title}>Flytta till program</Text>
             <TouchableOpacity onPress={onClose}>
               <X size={24} color="#94A3B8" />
             </TouchableOpacity>
@@ -42,7 +42,7 @@ export default function MoveToFolderModal({
           <ScrollView style={styles.folderList} contentContainerStyle={styles.folderListContent}>
             <TouchableOpacity style={styles.optionRow} onPress={onCreateNew}>
               <FolderPlus size={24} color="#A3E635" />
-              <Text style={styles.createNewText}>Skapa mapp</Text>
+              <Text style={styles.createNewText}>Skapa program</Text>
             </TouchableOpacity>
 
             {folders.map((folder) => (

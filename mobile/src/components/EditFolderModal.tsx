@@ -1,47 +1,59 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, Modal, TextInput, Platform, KeyboardAvoidingView, Image } from 'react-native';
 import * as ImagePicker from 'expo-image-picker';
-import { Image as ImageIcon } from 'lucide-react-native';
+import { Image as ImageIcon, Trash2 } from 'lucide-react-native';
+import { Folder } from '../types';
 
-interface CreateFolderModalProps {
+interface EditFolderModalProps {
   visible: boolean;
+  folder: Folder | null;
   onClose: () => void;
-  onCreate: (name: string, description: string, imageBase64: string | null) => void;
+  onSave: (name: string, description: string, imageBase64: string | null, imageDeleted: boolean) => void;
 }
 
-export default function CreateFolderModal({ visible, onClose, onCreate }: CreateFolderModalProps) {
+export default function EditFolderModal({ visible, folder, onClose, onSave }: EditFolderModalProps) {
   const [folderName, setFolderName] = useState('');
   const [description, setDescription] = useState('');
   const [imageBase64, setImageBase64] = useState<string | null>(null);
+  const [imagePreviewUrl, setImagePreviewUrl] = useState<string | null>(null);
+  const [imageDeleted, setImageDeleted] = useState(false);
 
-  const handleCreate = () => {
-    if (folderName.trim()) {
-      onCreate(folderName.trim(), description.trim(), imageBase64);
-      setFolderName('');
-      setDescription('');
+  useEffect(() => {
+    if (visible && folder) {
+      setFolderName(folder.name || '');
+      setDescription(folder.description || '');
       setImageBase64(null);
+      setImagePreviewUrl(folder.image_url || null);
+      setImageDeleted(false);
     }
-  };
+  }, [visible, folder]);
 
-  const handleClose = () => {
-    setFolderName('');
-    setDescription('');
-    setImageBase64(null);
-    onClose();
+  const handleSave = () => {
+    if (folderName.trim()) {
+      onSave(folderName.trim(), description.trim(), imageBase64, imageDeleted);
+    }
   };
 
   const pickImage = async () => {
     const result = await ImagePicker.launchImageLibraryAsync({
       mediaTypes: ImagePicker.MediaTypeOptions.Images,
       allowsEditing: true,
-      aspect: [1, 1], // Square images match the UI design
+      aspect: [1, 1],
       quality: 0.5,
-      base64: true, // We need base64 to upload to Supabase storage easily without file path issues
+      base64: true,
     });
 
     if (!result.canceled && result.assets[0].base64) {
       setImageBase64(result.assets[0].base64);
+      setImagePreviewUrl(`data:image/jpeg;base64,${result.assets[0].base64}`);
+      setImageDeleted(false);
     }
+  };
+
+  const removeImage = () => {
+    setImageBase64(null);
+    setImagePreviewUrl(null);
+    setImageDeleted(true);
   };
 
   return (
@@ -49,15 +61,15 @@ export default function CreateFolderModal({ visible, onClose, onCreate }: Create
       visible={visible}
       transparent={true}
       animationType="fade"
-      onRequestClose={handleClose}
+      onRequestClose={onClose}
     >
       <KeyboardAvoidingView 
         style={styles.modalOverlay} 
         behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
       >
-        <TouchableOpacity style={styles.modalOverlayDismiss} activeOpacity={1} onPress={handleClose} />
+        <TouchableOpacity style={styles.modalOverlayDismiss} activeOpacity={1} onPress={onClose} />
         <View style={styles.modalContent}>
-          <Text style={styles.title}>Skapa ett program</Text>
+          <Text style={styles.title}>Redigera program</Text>
           
           <View style={styles.inputContainer}>
             <TextInput
@@ -82,13 +94,18 @@ export default function CreateFolderModal({ visible, onClose, onCreate }: Create
           </View>
 
           <View style={styles.imagePickerRow}>
-            {imageBase64 ? (
-              <TouchableOpacity onPress={pickImage} style={styles.imagePreviewContainer}>
-                <Image 
-                  source={{ uri: `data:image/jpeg;base64,${imageBase64}` }} 
-                  style={styles.imagePreview} 
-                />
-              </TouchableOpacity>
+            {imagePreviewUrl ? (
+              <View style={styles.imageContainer}>
+                <TouchableOpacity onPress={pickImage} style={styles.imagePreviewContainer}>
+                  <Image 
+                    source={{ uri: imagePreviewUrl }} 
+                    style={styles.imagePreview} 
+                  />
+                </TouchableOpacity>
+                <TouchableOpacity style={styles.deleteButton} onPress={removeImage}>
+                  <Trash2 size={16} color="#FF3B3E" />
+                </TouchableOpacity>
+              </View>
             ) : (
               <TouchableOpacity style={styles.imagePickerButton} onPress={pickImage}>
                 <ImageIcon size={20} color="#F8FAFC" style={{ marginRight: 8 }} />
@@ -97,16 +114,16 @@ export default function CreateFolderModal({ visible, onClose, onCreate }: Create
             )}
             
             <View style={styles.buttonContainer}>
-              <TouchableOpacity onPress={handleClose} style={styles.button}>
+              <TouchableOpacity onPress={onClose} style={styles.button}>
                 <Text style={styles.cancelButtonText}>AVBRYT</Text>
               </TouchableOpacity>
               <TouchableOpacity 
-                onPress={handleCreate} 
+                onPress={handleSave} 
                 style={styles.button}
                 disabled={!folderName.trim()}
               >
-                <Text style={[styles.createButtonText, !folderName.trim() && styles.disabledButtonText]}>
-                  SKAPA
+                <Text style={[styles.saveButtonText, !folderName.trim() && styles.disabledButtonText]}>
+                  SPARA
                 </Text>
               </TouchableOpacity>
             </View>
@@ -174,6 +191,9 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: '600',
   },
+  imageContainer: {
+    position: 'relative',
+  },
   imagePreviewContainer: {
     width: 48,
     height: 48,
@@ -185,6 +205,16 @@ const styles = StyleSheet.create({
   imagePreview: {
     width: '100%',
     height: '100%',
+  },
+  deleteButton: {
+    position: 'absolute',
+    top: -8,
+    right: -8,
+    backgroundColor: '#0A0A0A',
+    borderRadius: 10,
+    padding: 2,
+    borderWidth: 1,
+    borderColor: '#27272A',
   },
   buttonContainer: {
     flexDirection: 'row',
@@ -200,7 +230,7 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: '700',
   },
-  createButtonText: {
+  saveButtonText: {
     color: '#F8FAFC',
     fontSize: 14,
     fontWeight: '700',

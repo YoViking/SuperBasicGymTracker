@@ -44,7 +44,7 @@ export default function WorkoutMenuModal({
 
           <TouchableOpacity style={styles.optionRow} onPress={onMoveToFolder}>
             <FolderOutput size={24} color="#F8FAFC" />
-            <Text style={styles.optionTextWhite}>Flytta till mapp</Text>
+            <Text style={styles.optionTextWhite}>Flytta till program</Text>
           </TouchableOpacity>
 
           <TouchableOpacity style={styles.optionRow} onPress={onEdit}>
