@@ -1,6 +1,7 @@
 import { Stack, useRouter, useSegments } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { useFonts, Bangers_400Regular } from '@expo-google-fonts/bangers';
+import { Poppins_900Black } from '@expo-google-fonts/poppins';
 import { ActivityIndicator, View, LogBox } from 'react-native';
 import { AuthProvider, useAuth } from '../src/context/AuthContext';
 import { useEffect } from 'react';
@@ -36,6 +37,7 @@ function RootLayoutNav() {
       <Stack.Screen name="workout/exercise/[workoutId]/[exerciseId]" options={{ headerShown: false }} />
       <Stack.Screen name="workout/replace/[workoutId]/[oldExerciseId]" options={{ headerShown: false }} />
       <Stack.Screen name="archive" options={{ headerShown: false }} />
+      <Stack.Screen name="folder/[id]" options={{ headerShown: false }} />
       <Stack.Screen name="choose-workout" options={{ presentation: 'modal', headerShown: false }} />
       <Stack.Screen name="create-workout" options={{ presentation: 'modal', headerShown: false }} />
     </Stack>
@@ -45,6 +47,7 @@ function RootLayoutNav() {
 export default function RootLayout() {
   const [fontsLoaded] = useFonts({
     Bangers_400Regular,
+    Poppins_900Black,
   });
 
   if (!fontsLoaded) {

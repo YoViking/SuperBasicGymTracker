@@ -1,15 +1,20 @@
 import React, { useEffect, useState } from 'react';
-import { View, Text, StyleSheet, ActivityIndicator, TouchableOpacity, ScrollView, Platform, ToastAndroid } from 'react-native';
-import { supabase } from '../lib/supabase';
-import { MoreVertical, Folder as FolderIcon } from 'lucide-react-native';
-import { Workout, Folder } from '../types';
-import { useRouter, useFocusEffect } from 'expo-router';
-import WorkoutMenuModal from './WorkoutMenuModal';
-import MoveToFolderModal from './MoveToFolderModal';
-import CreateFolderModal from './CreateFolderModal';
+import { View, Text, StyleSheet, FlatList, ActivityIndicator, TouchableOpacity, Platform, ToastAndroid } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
+import { useRouter, useLocalSearchParams } from 'expo-router';
+import { ArrowLeft, MoreVertical } from 'lucide-react-native';
+import { supabase } from '../../src/lib/supabase';
+import { Workout, Folder } from '../../src/types';
+import WorkoutMenuModal from '../../src/components/WorkoutMenuModal';
+import MoveToFolderModal from '../../src/components/MoveToFolderModal';
+import CreateFolderModal from '../../src/components/CreateFolderModal';
 
-export default function SavedWorkouts() {
+export default function FolderScreen() {
   const router = useRouter();
+  const { id, name } = useLocalSearchParams();
+  const folderId = Array.isArray(id) ? id[0] : id;
+  const folderName = Array.isArray(name) ? name[0] : name;
+
   const [workouts, setWorkouts] = useState<Workout[]>([]);
   const [folders, setFolders] = useState<Folder[]>([]);
   const [loading, setLoading] = useState(true);
@@ -17,48 +22,39 @@ export default function SavedWorkouts() {
   const [menuVisible, setMenuVisible] = useState(false);
   const [moveModalVisible, setMoveModalVisible] = useState(false);
   const [createModalVisible, setCreateModalVisible] = useState(false);
-  
   const [selectedWorkout, setSelectedWorkout] = useState<Workout | null>(null);
 
-  useFocusEffect(
-    React.useCallback(() => {
-      fetchWorkoutsAndFolders();
-    }, [])
-  );
+  useEffect(() => {
+    if (folderId) {
+      fetchData();
+    }
+  }, [folderId]);
 
-  const fetchWorkoutsAndFolders = async () => {
+  const fetchData = async () => {
     try {
       setLoading(true);
       const { data: { user } } = await supabase.auth.getUser();
-      
-      // Fetch folders if user exists
+
       if (user) {
-        const { data: foldersData, error: foldersError } = await supabase
+        const { data: foldersData } = await supabase
           .from('folders')
           .select('*')
           .eq('user_id', user.id)
           .order('created_at', { ascending: false });
-          
-        if (!foldersError && foldersData) {
-          setFolders(foldersData);
-        }
+        if (foldersData) setFolders(foldersData);
       }
 
-      // Fetch active workouts
-      const { data: workoutsData, error: workoutsError } = await supabase
+      const { data, error } = await supabase
         .from('workouts')
         .select('*')
         .or('is_deleted.is.null,is_deleted.eq.false')
+        .eq('folder_id', folderId)
         .order('created_at', { ascending: false });
 
-      if (workoutsError) {
-        console.error('Error fetching workouts:', workoutsError.message);
-        return;
-      }
-
-      setWorkouts(workoutsData || []);
+      if (error) throw error;
+      setWorkouts(data || []);
     } catch (error) {
-      console.error('Error:', error);
+      console.error('Error fetching folder workouts:', error);
     } finally {
       setLoading(false);
     }
@@ -84,11 +80,9 @@ export default function SavedWorkouts() {
       
       if (error) throw error;
       setWorkouts(prev => prev.filter(w => w.id !== selectedWorkout.id));
-      if (Platform.OS === 'android') ToastAndroid.show('Workout raderad', ToastAndroid.SHORT);
       handleCloseMenu();
     } catch (e: any) {
       console.error(e);
-      if (Platform.OS === 'android') ToastAndroid.show('Ett fel inträffade', ToastAndroid.SHORT);
     }
   };
 
@@ -99,37 +93,37 @@ export default function SavedWorkouts() {
     }
   };
 
-  const handleMoveToFolder = async (folderId: string) => {
+  const handleMoveToFolder = async (newFolderId: string) => {
     if (!selectedWorkout) return;
     try {
       const { error } = await supabase
         .from('workouts')
-        .update({ folder_id: folderId })
+        .update({ folder_id: newFolderId })
         .eq('id', selectedWorkout.id);
       
       if (error) throw error;
       
-      setWorkouts(prev => prev.map(w => 
-        w.id === selectedWorkout.id ? { ...w, folder_id: folderId } : w
-      ));
+      // If we moved it to a DIFFERENT folder, remove it from this list
+      if (newFolderId !== folderId) {
+         setWorkouts(prev => prev.filter(w => w.id !== selectedWorkout.id));
+      }
       
       if (Platform.OS === 'android') ToastAndroid.show('Flyttad till mapp', ToastAndroid.SHORT);
       setMoveModalVisible(false);
       setSelectedWorkout(null);
     } catch (e: any) {
       console.error(e);
-      if (Platform.OS === 'android') ToastAndroid.show('Ett fel inträffade', ToastAndroid.SHORT);
     }
   };
 
-  const handleCreateFolder = async (name: string) => {
+  const handleCreateFolder = async (folderName: string) => {
     try {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) return;
 
       const { data, error } = await supabase
         .from('folders')
-        .insert([{ name, user_id: user.id }])
+        .insert([{ name: folderName, user_id: user.id }])
         .select()
         .single();
         
@@ -138,22 +132,19 @@ export default function SavedWorkouts() {
       setFolders(prev => [data, ...prev]);
       setCreateModalVisible(false);
       
-      // If we had a selected workout, automatically move it to the new folder
       if (selectedWorkout) {
         await handleMoveToFolder(data.id);
       }
     } catch (e: any) {
       console.error(e);
-      if (Platform.OS === 'android') ToastAndroid.show('Kunde inte skapa mapp', ToastAndroid.SHORT);
     }
   };
 
-  const renderWorkoutItem = (item: Workout) => {
+  const renderWorkoutItem = ({ item }: { item: Workout }) => {
     const formattedDate = new Date(item.created_at).toISOString().split('T')[0];
     
     return (
       <TouchableOpacity 
-        key={item.id.toString()}
         style={styles.workoutCard} 
         activeOpacity={0.7}
         onPress={() => router.push(`/workout/${item.id}`)}
@@ -169,56 +160,30 @@ export default function SavedWorkouts() {
     );
   };
 
-  if (loading) {
-    return (
-      <View style={[styles.content, { justifyContent: 'center' }]}>
-        <ActivityIndicator size="large" color="#A3E635" />
-      </View>
-    );
-  }
-
-  // Workouts without a folder
-  const standaloneWorkouts = workouts.filter(w => !w.folder_id);
-
   return (
-    <ScrollView style={styles.content} contentContainerStyle={styles.scrollContent}>
-      
-      <View style={styles.foldersContainer}>
-        {folders.map(folder => {
-          const count = workouts.filter(w => w.folder_id === folder.id).length;
-          return (
-            <TouchableOpacity 
-              key={folder.id} 
-              style={styles.folderRow}
-              onPress={() => router.push({ pathname: '/folder/[id]', params: { id: folder.id, name: folder.name } })}
-            >
-              <View style={styles.folderIconWrapper}>
-                <FolderIcon size={24} color="#A3E635" />
-              </View>
-              <View style={styles.folderInfo}>
-                <Text style={styles.folderTitle}>{folder.name}</Text>
-                <Text style={styles.folderSubtitle}>{count} objekt</Text>
-              </View>
-            </TouchableOpacity>
-          );
-        })}
+    <SafeAreaView style={styles.safeArea}>
+      <View style={styles.header}>
+        <TouchableOpacity style={styles.backButton} onPress={() => router.back()}>
+          <ArrowLeft size={24} color="#F8FAFC" />
+        </TouchableOpacity>
+        <Text style={styles.headerTitle}>{folderName || 'Mapp'}</Text>
       </View>
 
-      <View style={styles.workoutsContainer}>
-        {standaloneWorkouts.length === 0 && folders.length === 0 ? (
-          <Text style={styles.emptyText}>Inga träningspass hittades.</Text>
+      <View style={styles.content}>
+        {loading ? (
+          <ActivityIndicator size="large" color="#A3E635" style={{ marginTop: 40 }} />
         ) : (
-          standaloneWorkouts.map(renderWorkoutItem)
+          <FlatList
+            data={workouts}
+            keyExtractor={(item) => item.id.toString()}
+            renderItem={renderWorkoutItem}
+            contentContainerStyle={styles.listContent}
+            ListEmptyComponent={
+              <Text style={styles.emptyText}>Mappen är tom.</Text>
+            }
+          />
         )}
       </View>
-
-      <TouchableOpacity 
-        style={styles.arkivButton}
-        activeOpacity={0.7}
-        onPress={() => router.push('/archive')}
-      >
-        <Text style={styles.arkivButtonText}>Arkiv</Text>
-      </TouchableOpacity>
 
       <WorkoutMenuModal
         visible={menuVisible}
@@ -248,59 +213,46 @@ export default function SavedWorkouts() {
 
       <CreateFolderModal
         visible={createModalVisible}
-        onClose={() => {
-          setCreateModalVisible(false);
-          if (!selectedWorkout) {
-            // Only clear selection if we didn't come from a workout menu
-          }
-        }}
+        onClose={() => setCreateModalVisible(false)}
         onCreate={handleCreateFolder}
       />
-    </ScrollView>
+    </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
-  content: {
+  safeArea: {
     flex: 1,
-    backgroundColor: 'transparent',
-    paddingHorizontal: 20,
+    backgroundColor: '#0A0A0A',
   },
-  scrollContent: {
-    paddingBottom: 40,
-  },
-  foldersContainer: {
-    marginBottom: 16,
-  },
-  folderRow: {
+  header: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginBottom: 16,
+    paddingHorizontal: 16,
+    paddingVertical: 16,
   },
-  folderIconWrapper: {
-    marginRight: 16,
+  backButton: {
+    padding: 8,
+    marginRight: 8,
   },
-  folderInfo: {
-    flex: 1,
-  },
-  folderTitle: {
-    color: '#F8FAFC',
-    fontSize: 18,
+  headerTitle: {
+    fontSize: 20,
     fontWeight: '700',
-    marginBottom: 4,
+    color: '#F8FAFC',
   },
-  folderSubtitle: {
-    color: '#94A3B8',
-    fontSize: 14,
+  content: {
+    flex: 1,
+    paddingHorizontal: 20,
+    paddingTop: 16,
   },
-  workoutsContainer: {
-    marginBottom: 16,
+  listContent: {
+    paddingBottom: 40,
   },
   workoutCard: {
-    backgroundColor: '#3F3F46', // Matched to Figma grey boxes
+    backgroundColor: '#3F3F46', // Matched to Figma
     borderRadius: 8,
     padding: 16,
-    marginBottom: 12,
+    marginBottom: 16,
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
@@ -325,19 +277,6 @@ const styles = StyleSheet.create({
   emptyText: {
     color: '#94A3B8',
     textAlign: 'center',
-    marginVertical: 20,
-  },
-  arkivButton: {
-    backgroundColor: '#3F3F46', // Matched to workout cards
-    borderRadius: 8,
-    paddingVertical: 18,
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginTop: 8,
-  },
-  arkivButtonText: {
-    color: '#F8FAFC',
-    fontSize: 16,
-    fontWeight: '700',
+    marginTop: 40,
   },
 });

@@ -1,24 +1,22 @@
 import React from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, Modal, Platform } from 'react-native';
-import { Trash2, Edit2, CalendarPlus, CalendarMinus } from 'lucide-react-native';
+import { Trash2, Edit2, FolderOutput } from 'lucide-react-native';
 
 interface WorkoutMenuModalProps {
   visible: boolean;
   workoutName: string;
-  isArchived: boolean;
   onClose: () => void;
   onDelete: () => void;
-  onToggleArchive: () => void;
+  onMoveToFolder: () => void;
   onEdit: () => void;
 }
 
 export default function WorkoutMenuModal({
   visible,
   workoutName,
-  isArchived,
   onClose,
   onDelete,
-  onToggleArchive,
+  onMoveToFolder,
   onEdit
 }: WorkoutMenuModalProps) {
   return (
@@ -44,15 +42,9 @@ export default function WorkoutMenuModal({
             <Text style={styles.optionTextRed}>Radera</Text>
           </TouchableOpacity>
 
-          <TouchableOpacity style={styles.optionRow} onPress={onToggleArchive}>
-            {isArchived ? (
-              <CalendarPlus size={24} color="#F8FAFC" />
-            ) : (
-              <CalendarMinus size={24} color="#F8FAFC" />
-            )}
-            <Text style={styles.optionTextWhite}>
-              {isArchived ? 'Lägg till i veckans' : 'Ta bort från veckans'}
-            </Text>
+          <TouchableOpacity style={styles.optionRow} onPress={onMoveToFolder}>
+            <FolderOutput size={24} color="#F8FAFC" />
+            <Text style={styles.optionTextWhite}>Flytta till mapp</Text>
           </TouchableOpacity>
 
           <TouchableOpacity style={styles.optionRow} onPress={onEdit}>

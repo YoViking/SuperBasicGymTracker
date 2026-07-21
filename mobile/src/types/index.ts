@@ -6,6 +6,14 @@ export interface Workout {
   completed_at?: string; // Optional if not yet completed
   is_archived?: boolean;
   is_deleted?: boolean;
+  folder_id?: string | null;
+}
+
+export interface Folder {
+  id: string;
+  user_id: string;
+  name: string;
+  created_at: string;
 }
 
 // Represents an exercise in a user's workout
