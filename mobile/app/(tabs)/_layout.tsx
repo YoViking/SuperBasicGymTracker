@@ -1,5 +1,5 @@
 import { Tabs } from 'expo-router';
-import { Dumbbell, Search, User } from 'lucide-react-native';
+import { Home, Dumbbell, Search, User } from 'lucide-react-native';
 
 export default function TabLayout() {
   return (
@@ -15,6 +15,15 @@ export default function TabLayout() {
         tabBarActiveTintColor: '#A3E635', // Lime green active tint
         tabBarInactiveTintColor: '#94A3B8', // Slate 400 inactive tint
       }}>
+      <Tabs.Screen
+        name="index"
+        options={{
+          title: 'Hem',
+          tabBarIcon: ({ color, size }) => (
+            <Home size={size} color={color} />
+          ),
+        }}
+      />
       <Tabs.Screen
         name="workouts"
         options={{
@@ -42,3 +51,4 @@ export default function TabLayout() {
     </Tabs>
   );
 }
+

@@ -6,6 +6,7 @@ import { WorkoutLog } from '../types';
 export interface WeeklyStats {
   activeWorkoutsCount: number;
   completedThisWeekCount: number;
+  completedPreviousWeekCount: number;
   daysCompleted: boolean[]; // Mon - Sun
   currentWeekVolume: number;
   currentWeekTime: number; // in seconds
@@ -28,6 +29,7 @@ export function useWeeklyStats() {
   const [stats, setStats] = useState<WeeklyStats>({
     activeWorkoutsCount: 0,
     completedThisWeekCount: 0,
+    completedPreviousWeekCount: 0,
     daysCompleted: Array(7).fill(false),
     currentWeekVolume: 0,
     currentWeekTime: 0,
@@ -75,6 +77,7 @@ export function useWeeklyStats() {
       let completedThisWeekCount = 0;
       let previousWeekVolume = 0;
       let previousWeekTime = 0;
+      let completedPreviousWeekCount = 0;
       const daysCompleted = Array(7).fill(false);
       
       const weeklyVolumes = [0, 0, 0, 0, 0]; // 0 is oldest, 4 is current
@@ -103,6 +106,7 @@ export function useWeeklyStats() {
           // Previous week
           previousWeekVolume += log.total_volume || 0;
           previousWeekTime += log.duration_seconds || 0;
+          completedPreviousWeekCount += 1;
         }
       });
 
@@ -118,6 +122,7 @@ export function useWeeklyStats() {
       setStats({
         activeWorkoutsCount: activeWorkouts ? activeWorkouts.length : 0,
         completedThisWeekCount,
+        completedPreviousWeekCount,
         daysCompleted,
         currentWeekVolume,
         currentWeekTime,
