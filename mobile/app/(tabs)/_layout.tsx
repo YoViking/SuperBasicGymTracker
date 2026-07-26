@@ -1,3 +1,4 @@
+import { Platform } from 'react-native';
 import { Tabs } from 'expo-router';
 import { Home, Dumbbell, Search, User } from 'lucide-react-native';
 
@@ -11,6 +12,13 @@ export default function TabLayout() {
           backgroundColor: '#1E222B', // Dark slate background for tab bar
           borderTopWidth: 0,
           elevation: 0,
+          height: Platform.OS === 'ios' ? 90 : 74,
+          paddingTop: 10,
+          paddingBottom: Platform.OS === 'ios' ? 28 : 14,
+        },
+        tabBarItemStyle: {
+          justifyContent: 'center',
+          alignItems: 'center',
         },
         tabBarActiveTintColor: '#A3E635', // Lime green active tint
         tabBarInactiveTintColor: '#94A3B8', // Slate 400 inactive tint
