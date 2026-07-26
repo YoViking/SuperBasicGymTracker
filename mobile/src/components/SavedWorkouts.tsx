@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { View, Text, StyleSheet, ActivityIndicator, TouchableOpacity, ScrollView, Platform, ToastAndroid } from 'react-native';
 import { supabase } from '../lib/supabase';
-import { MoreVertical, Folder as FolderIcon } from 'lucide-react-native';
+import { MoreVertical, Folder as FolderIcon, Plus } from 'lucide-react-native';
 import { Workout, Folder } from '../types';
 import { useRouter, useFocusEffect } from 'expo-router';
 import WorkoutMenuModal from './WorkoutMenuModal';
@@ -101,37 +101,34 @@ export default function SavedWorkouts() {
       handleCloseMenu();
     } catch (e: any) {
       console.error(e);
-      if (Platform.OS === 'android') ToastAndroid.show('Ett fel inträffade', ToastAndroid.SHORT);
+      if (Platform.OS === 'android') ToastAndroid.show('Kunde inte radera workout', ToastAndroid.SHORT);
     }
   };
 
   const handleEdit = () => {
     if (selectedWorkout) {
-      router.push(`/workout/edit/${selectedWorkout.id}`);
       handleCloseMenu();
+      router.push(`/workout/edit/${selectedWorkout.id}`);
     }
   };
 
-  const handleMoveToFolder = async (folderId: string) => {
+  const handleMoveToFolder = async (folderId: string | null) => {
     if (!selectedWorkout) return;
     try {
       const { error } = await supabase
         .from('workouts')
         .update({ folder_id: folderId })
         .eq('id', selectedWorkout.id);
-      
+        
       if (error) throw error;
       
-      setWorkouts(prev => prev.map(w => 
-        w.id === selectedWorkout.id ? { ...w, folder_id: folderId } : w
-      ));
-      
-      if (Platform.OS === 'android') ToastAndroid.show('Flyttad till program', ToastAndroid.SHORT);
+      setWorkouts(prev => prev.map(w => w.id === selectedWorkout.id ? { ...w, folder_id: folderId } : w));
       setMoveModalVisible(false);
       setSelectedWorkout(null);
+      if (Platform.OS === 'android') ToastAndroid.show('Flyttad till program', ToastAndroid.SHORT);
     } catch (e: any) {
       console.error(e);
-      if (Platform.OS === 'android') ToastAndroid.show('Ett fel inträffade', ToastAndroid.SHORT);
+      if (Platform.OS === 'android') ToastAndroid.show('Kunde inte flytta workout', ToastAndroid.SHORT);
     }
   };
 
@@ -249,6 +246,17 @@ export default function SavedWorkouts() {
   return (
     <ScrollView style={styles.content} contentContainerStyle={styles.scrollContent}>
       
+      <Text style={styles.headerTitle}>Träning</Text>
+
+      <TouchableOpacity 
+        style={styles.skapaButton}
+        activeOpacity={0.8}
+        onPress={() => setCreateModalVisible(true)}
+      >
+        <Plus size={18} color="#F8FAFC" style={{ marginRight: 6 }} />
+        <Text style={styles.skapaButtonText}>Skapa...</Text>
+      </TouchableOpacity>
+      
       <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.foldersContainer} contentContainerStyle={{ paddingRight: 20 }}>
         {folders.map(folder => {
           return (
@@ -335,6 +343,28 @@ const styles = StyleSheet.create({
   },
   scrollContent: {
     paddingBottom: 40,
+  },
+  headerTitle: {
+    color: '#F8FAFC',
+    fontSize: 28,
+    fontWeight: 'bold',
+    marginBottom: 16,
+    marginTop: 8,
+  },
+  skapaButton: {
+    backgroundColor: '#272A34',
+    borderRadius: 24,
+    paddingVertical: 12,
+    paddingHorizontal: 20,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 20,
+  },
+  skapaButtonText: {
+    color: '#F8FAFC',
+    fontSize: 16,
+    fontWeight: 'bold',
   },
   foldersContainer: {
     marginBottom: 16,
