@@ -45,15 +45,72 @@ export function useWeeklyStats() {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) return;
 
-      // 1. Fetch active workouts in "Veckans" container
-      const { data: activeWorkouts, error: activeErr } = await supabase
-        .from('workouts')
-        .select('id')
-        .eq('user_id', user.id)
-        .or('is_deleted.is.null,is_deleted.eq.false')
-        .or('is_archived.is.null,is_archived.eq.false');
+      // 1. Fetch active workouts in the currently used program/folder
+      let activeWorkoutsCount = 0;
+      let currentFolderId: string | null = null;
 
-      if (activeErr) throw activeErr;
+      // Find the most recently logged workout to see what folder it belongs to
+      const { data: recentLogs, error: recentLogsErr } = await supabase
+        .from('workout_logs')
+        .select('workout_id')
+        .eq('user_id', user.id)
+        .order('created_at', { ascending: false })
+        .limit(1);
+
+      if (!recentLogsErr && recentLogs && recentLogs.length > 0 && recentLogs[0].workout_id) {
+        const { data: workoutData } = await supabase
+          .from('workouts')
+          .select('folder_id')
+          .eq('id', recentLogs[0].workout_id)
+          .maybeSingle();
+
+        if (workoutData && workoutData.folder_id) {
+          currentFolderId = workoutData.folder_id;
+        }
+      }
+
+      // Fallback if no logs: Find the most recently created folder
+      if (!currentFolderId) {
+        const { data: recentFolders } = await supabase
+          .from('folders')
+          .select('id')
+          .eq('user_id', user.id)
+          .order('created_at', { ascending: false })
+          .limit(1);
+          
+        if (recentFolders && recentFolders.length > 0) {
+          currentFolderId = recentFolders[0].id;
+        }
+      }
+
+      // If we found a folder, count workouts inside it
+      if (currentFolderId) {
+        const { data: folderWorkouts, error: folderWorkoutsErr } = await supabase
+          .from('workouts')
+          .select('id')
+          .eq('user_id', user.id)
+          .eq('folder_id', currentFolderId)
+          .or('is_deleted.is.null,is_deleted.eq.false')
+          .or('is_archived.is.null,is_archived.eq.false');
+
+        if (!folderWorkoutsErr && folderWorkouts) {
+          activeWorkoutsCount = folderWorkouts.length;
+        }
+      }
+
+      // Fallback: If no folder workouts or no folder was found, count all active workouts
+      if (activeWorkoutsCount === 0) {
+        const { data: activeWorkouts, error: activeErr } = await supabase
+          .from('workouts')
+          .select('id')
+          .eq('user_id', user.id)
+          .or('is_deleted.is.null,is_deleted.eq.false')
+          .or('is_archived.is.null,is_archived.eq.false');
+
+        if (activeErr) throw activeErr;
+        activeWorkoutsCount = activeWorkouts ? activeWorkouts.length : 0;
+      }
+
 
       // 2. Fetch workout logs for the last 5 weeks
       const today = new Date();
@@ -120,7 +177,7 @@ export function useWeeklyStats() {
       });
 
       setStats({
-        activeWorkoutsCount: activeWorkouts ? activeWorkouts.length : 0,
+        activeWorkoutsCount,
         completedThisWeekCount,
         completedPreviousWeekCount,
         daysCompleted,
