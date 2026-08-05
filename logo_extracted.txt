@@ -1,0 +1,2 @@
+_REQUEST>
+please use this for the layout. Place it on the top of the start page. I want thick withe lines with black in- and outside 

@@ -301,6 +301,26 @@ export default function WorkoutDetailScreen() {
           .insert(insertData);
           
         if (exError) throw exError;
+
+        // Increment completions_count in exercise_library for completed exercises
+        for (const log of exerciseLogs) {
+          try {
+            const { data: exData } = await supabase
+              .from('exercise_library')
+              .select('id, completions_count')
+              .eq('name', log.exercise_name)
+              .maybeSingle();
+
+            if (exData) {
+              await supabase
+                .from('exercise_library')
+                .update({ completions_count: (exData.completions_count || 0) + 1 })
+                .eq('id', exData.id);
+            }
+          } catch (e) {
+            console.log('Error updating completions_count:', e);
+          }
+        }
       }
 
       if (Platform.OS === 'android') {

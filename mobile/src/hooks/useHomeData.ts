@@ -31,42 +31,116 @@ export function useHomeData() {
       setData((prev) => ({ ...prev, loading: true }));
       const { data: { user } } = await supabase.auth.getUser();
 
-      // 1. Fetch Latest Program Folder
-      let latestFolder: Folder | null = null;
+      // 2. Fetch Latest Active Workouts with exercise info based on recently logged workouts
+      let latestWorkouts: Workout[] = [];
+      let recentLogWorkoutIds: string[] = [];
+
       if (user) {
-        const { data: folderData, error: folderErr } = await supabase
-          .from('folders')
-          .select('*')
+        // Fetch recently logged workouts
+        const { data: recentLogs, error: recentLogsErr } = await supabase
+          .from('workout_logs')
+          .select('workout_id, created_at')
           .eq('user_id', user.id)
           .order('created_at', { ascending: false })
-          .limit(1);
+          .limit(10);
 
-        if (!folderErr && folderData && folderData.length > 0) {
-          latestFolder = folderData[0];
+        if (!recentLogsErr && recentLogs) {
+          const ids = recentLogs
+            .map((log) => log.workout_id)
+            .filter((id): id is string => !!id);
+          recentLogWorkoutIds = Array.from(new Set(ids));
+        }
+
+        if (recentLogWorkoutIds.length > 0) {
+          const { data: workoutsData, error: workoutsErr } = await supabase
+            .from('workouts')
+            .select(`
+              *,
+              workout_exercises (
+                order_index,
+                created_at,
+                exercise:exercise_library (
+                  gifUrl,
+                  muscle_group
+                )
+              )
+            `)
+            .in('id', recentLogWorkoutIds.slice(0, 2))
+            .or('is_deleted.is.null,is_deleted.eq.false');
+
+          if (!workoutsErr && workoutsData) {
+            // Sort to match the order in recentLogWorkoutIds (most recently completed first)
+            latestWorkouts = workoutsData.sort((a, b) => {
+              const indexA = recentLogWorkoutIds.indexOf(a.id);
+              const indexB = recentLogWorkoutIds.indexOf(b.id);
+              return indexA - indexB;
+            });
+          }
+        }
+
+        // Fallback: If fewer than 2 recent workouts, fetch the latest created ones for this user
+        if (latestWorkouts.length < 2) {
+          const limitCount = 2 - latestWorkouts.length;
+          const { data: fallbackData, error: fallbackErr } = await supabase
+            .from('workouts')
+            .select(`
+              *,
+              workout_exercises (
+                order_index,
+                created_at,
+                exercise:exercise_library (
+                  gifUrl,
+                  muscle_group
+                )
+              )
+            `)
+            .eq('user_id', user.id)
+            .or('is_deleted.is.null,is_deleted.eq.false')
+            .order('created_at', { ascending: false })
+            .limit(10); // Fetch a few to filter duplicates in memory
+
+          if (!fallbackErr && fallbackData) {
+            const excludeIds = new Set(latestWorkouts.map((w) => w.id));
+            const filteredFallback = fallbackData
+              .filter((w) => !excludeIds.has(w.id))
+              .slice(0, limitCount);
+            latestWorkouts = [...latestWorkouts, ...filteredFallback];
+          }
         }
       }
 
-      // 2. Fetch Latest Active Workouts with exercise info
-      let latestWorkouts: Workout[] = [];
-      const { data: workoutsData, error: workoutsErr } = await supabase
-        .from('workouts')
-        .select(`
-          *,
-          workout_exercises (
-            order_index,
-            created_at,
-            exercise:exercise_library (
-              gifUrl,
-              muscle_group
-            )
-          )
-        `)
-        .or('is_deleted.is.null,is_deleted.eq.false')
-        .order('created_at', { ascending: false })
-        .limit(2);
+      // 1. Fetch Latest Program Folder (based on the most recently trained workout)
+      let latestFolder: Folder | null = null;
+      if (user) {
+        // First, try to get the folder of the most recently trained workout
+        if (latestWorkouts.length > 0) {
+          const firstWorkout = latestWorkouts[0];
+          if (firstWorkout.folder_id) {
+            const { data: folderData, error: folderErr } = await supabase
+              .from('folders')
+              .select('*')
+              .eq('id', firstWorkout.folder_id)
+              .single();
 
-      if (!workoutsErr && workoutsData) {
-        latestWorkouts = workoutsData;
+            if (!folderErr && folderData) {
+              latestFolder = folderData;
+            }
+          }
+        }
+
+        // Fallback: If no folder found from recent workouts, get the most recently created folder
+        if (!latestFolder) {
+          const { data: folderData, error: folderErr } = await supabase
+            .from('folders')
+            .select('*')
+            .eq('user_id', user.id)
+            .order('created_at', { ascending: false })
+            .limit(1);
+
+          if (!folderErr && folderData && folderData.length > 0) {
+            latestFolder = folderData[0];
+          }
+        }
       }
 
       // 3. Fetch Personal Best Achievements
@@ -142,6 +216,18 @@ export function useHomeData() {
         }
         const randomIndex = charSum % exercisesData.length;
         dailyExercise = exercisesData[randomIndex];
+
+        if (dailyExercise) {
+          const { count } = await supabase
+            .from('workout_exercise_logs')
+            .select('*', { count: 'exact', head: true })
+            .eq('exercise_name', dailyExercise.name);
+
+          dailyExercise = {
+            ...dailyExercise,
+            completions_count: Math.max(dailyExercise.completions_count || 0, count || 0),
+          };
+        }
       }
 
       setData({

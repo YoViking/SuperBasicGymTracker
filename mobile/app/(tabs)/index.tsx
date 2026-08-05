@@ -301,8 +301,11 @@ export default function HomeScreen() {
                   contentFit="cover"
                 />
                 <View style={styles.dailyTextContainer}>
-                  <Text style={styles.dailyTitle} numberOfLines={2}>
+                  <Text style={styles.dailyTitle} numberOfLines={1}>
                     {homeData.dailyExercise.name}
+                  </Text>
+                  <Text style={styles.dailyCountText}>
+                    {homeData.dailyExercise.completions_count || 0}
                   </Text>
                 </View>
                 <TouchableOpacity
@@ -547,6 +550,11 @@ const styles = StyleSheet.create({
     color: '#F8FAFC',
     fontSize: 18,
     fontWeight: 'bold',
+  },
+  dailyCountText: {
+    color: '#94A3B8',
+    fontSize: 14,
+    marginTop: 4,
   },
   moreButton: {
     padding: 8,

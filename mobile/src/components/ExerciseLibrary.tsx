@@ -42,7 +42,31 @@ export default function ExerciseLibrary({
         console.error('Error fetching exercises:', error.message);
         return;
       }
-      setExercises(data || []);
+
+      // Fetch count from workout_exercise_logs to ensure historical counts are included
+      const { data: logsData } = await supabase
+        .from('workout_exercise_logs')
+        .select('exercise_name');
+
+      const logCounts = new Map<string, number>();
+      if (logsData) {
+        logsData.forEach((log: any) => {
+          if (log.exercise_name) {
+            logCounts.set(log.exercise_name, (logCounts.get(log.exercise_name) || 0) + 1);
+          }
+        });
+      }
+
+      const merged = (data || []).map((ex: Exercise) => {
+        const loggedCount = logCounts.get(ex.name) || 0;
+        const colCount = ex.completions_count || 0;
+        return {
+          ...ex,
+          completions_count: Math.max(colCount, loggedCount),
+        };
+      });
+
+      setExercises(merged);
     } catch (error) {
       console.error('Error:', error);
     } finally {
@@ -112,7 +136,10 @@ export default function ExerciseLibrary({
           <Dumbbell size={24} color="#94A3B8" />
         </View>
       )}
-      <Text style={styles.exerciseTitle} numberOfLines={2}>{item.name}</Text>
+      <View style={styles.exerciseTextContainer}>
+        <Text style={styles.exerciseTitle} numberOfLines={1}>{item.name}</Text>
+        <Text style={styles.completionCountText}>{item.completions_count || 0}</Text>
+      </View>
       <TouchableOpacity 
         style={styles.menuButton} 
         onPress={() => openMenu(item)}
@@ -301,11 +328,20 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
   },
+  exerciseTextContainer: {
+    flex: 1,
+    justifyContent: 'center',
+  },
   exerciseTitle: {
     fontSize: 18,
     fontWeight: '700',
     color: '#fff',
-    flex: 1,
+    marginBottom: 2,
+  },
+  completionCountText: {
+    fontSize: 14,
+    fontWeight: '400',
+    color: '#94A3B8',
   },
   menuButton: {
     padding: 16, // Increase padding to make the dots icon well-spaced on the right

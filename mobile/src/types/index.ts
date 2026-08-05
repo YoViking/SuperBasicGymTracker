@@ -47,6 +47,7 @@ export interface ExerciseLibrary {
   muscle_group?: string;
   link?: string;
   gifUrl?: string;
+  completions_count?: number;
 }
 
 export interface Bookmark {
