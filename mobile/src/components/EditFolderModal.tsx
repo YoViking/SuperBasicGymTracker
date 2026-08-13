@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, Modal, TextInput, Platform, KeyboardAvoidingView, Image } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, Modal, TextInput, Platform, KeyboardAvoidingView, Image, Alert } from 'react-native';
 import * as ImagePicker from 'expo-image-picker';
 import { Image as ImageIcon, Trash2 } from 'lucide-react-native';
 import { Folder } from '../types';
@@ -9,9 +9,10 @@ interface EditFolderModalProps {
   folder: Folder | null;
   onClose: () => void;
   onSave: (name: string, description: string, imageBase64: string | null, imageDeleted: boolean) => void;
+  onDelete?: () => void;
 }
 
-export default function EditFolderModal({ visible, folder, onClose, onSave }: EditFolderModalProps) {
+export default function EditFolderModal({ visible, folder, onClose, onSave, onDelete }: EditFolderModalProps) {
   const [folderName, setFolderName] = useState('');
   const [description, setDescription] = useState('');
   const [imageBase64, setImageBase64] = useState<string | null>(null);
@@ -56,6 +57,25 @@ export default function EditFolderModal({ visible, folder, onClose, onSave }: Ed
     setImageDeleted(true);
   };
 
+  const handleDelete = () => {
+    Alert.alert(
+      'Radera program',
+      'Är du säker på att du vill radera detta program? Dina workouts kommer att sparas.',
+      [
+        { text: 'Avbryt', style: 'cancel' },
+        {
+          text: 'Radera',
+          style: 'destructive',
+          onPress: () => {
+            if (onDelete) {
+              onDelete();
+            }
+          },
+        },
+      ]
+    );
+  };
+
   return (
     <Modal
       visible={visible}
@@ -93,7 +113,7 @@ export default function EditFolderModal({ visible, folder, onClose, onSave }: Ed
             />
           </View>
 
-          <View style={styles.imagePickerRow}>
+          <View style={styles.imageSection}>
             {imagePreviewUrl ? (
               <View style={styles.imageContainer}>
                 <TouchableOpacity onPress={pickImage} style={styles.imagePreviewContainer}>
@@ -112,8 +132,15 @@ export default function EditFolderModal({ visible, folder, onClose, onSave }: Ed
                 <Text style={styles.imagePickerText}>Lägg till bild</Text>
               </TouchableOpacity>
             )}
-            
-            <View style={styles.buttonContainer}>
+          </View>
+
+          <View style={styles.buttonRow}>
+            {onDelete && (
+              <TouchableOpacity onPress={handleDelete} style={styles.deleteFolderButton}>
+                <Text style={styles.deleteFolderText}>RADERA</Text>
+              </TouchableOpacity>
+            )}
+            <View style={styles.rightButtons}>
               <TouchableOpacity onPress={onClose} style={styles.button}>
                 <Text style={styles.cancelButtonText}>AVBRYT</Text>
               </TouchableOpacity>
@@ -170,11 +197,9 @@ const styles = StyleSheet.create({
     fontSize: 16,
     paddingVertical: 8,
   },
-  imagePickerRow: {
-    flexDirection: 'row',
-    alignItems: 'flex-end',
-    justifyContent: 'space-between',
-    marginTop: 8,
+  imageSection: {
+    marginBottom: 24,
+    alignItems: 'flex-start',
   },
   imagePickerButton: {
     flexDirection: 'row',
@@ -216,10 +241,27 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: '#27272A',
   },
-  buttonContainer: {
+  buttonRow: {
     flexDirection: 'row',
-    justifyContent: 'flex-end',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    width: '100%',
+    marginTop: 8,
+  },
+  rightButtons: {
+    flexDirection: 'row',
+    alignItems: 'center',
     gap: 16,
+    marginLeft: 'auto',
+  },
+  deleteFolderText: {
+    color: '#EF4444',
+    fontSize: 14,
+    fontWeight: '700',
+  },
+  deleteFolderButton: {
+    paddingVertical: 8,
+    paddingRight: 8,
   },
   button: {
     paddingVertical: 8,

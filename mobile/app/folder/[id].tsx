@@ -210,12 +210,48 @@ export default function FolderScreen() {
       if (error) throw error;
 
       // Update local state
-      setFolders(prev => prev.map(f => f.id === folderId ? { ...f, name: newName, description: newDescription, image_url } : f));
+      setFolders(prev => prev.map(f => f.id === folderId ? { ...f, name: newName, description: newDescription, image_url: image_url || undefined } : f));
       setEditModalVisible(false);
       if (Platform.OS === 'android') ToastAndroid.show('Programmet har uppdaterats', ToastAndroid.SHORT);
     } catch (e: any) {
       console.error(e);
       if (Platform.OS === 'android') ToastAndroid.show('Kunde inte uppdatera program', ToastAndroid.SHORT);
+    }
+  };
+
+  const handleDeleteFolder = async () => {
+    if (!folderId) return;
+    try {
+      // 1. Update workouts to disassociate them from this folder
+      const { error: workoutsError } = await supabase
+        .from('workouts')
+        .update({ folder_id: null })
+        .eq('folder_id', folderId);
+
+      if (workoutsError) throw workoutsError;
+
+      // 2. Delete the folder from folders table
+      const { error: folderError } = await supabase
+        .from('folders')
+        .delete()
+        .eq('id', folderId);
+
+      if (folderError) throw folderError;
+
+      // 3. Update local state
+      setFolders(prev => prev.filter(f => f.id !== folderId));
+      setEditModalVisible(false);
+
+      if (Platform.OS === 'android') {
+        ToastAndroid.show('Programmet har raderats', ToastAndroid.SHORT);
+      }
+      
+      router.back();
+    } catch (e: any) {
+      console.error(e);
+      if (Platform.OS === 'android') {
+        ToastAndroid.show('Kunde inte radera programmet', ToastAndroid.SHORT);
+      }
     }
   };
 
@@ -361,6 +397,7 @@ export default function FolderScreen() {
         folder={currentFolder}
         onClose={() => setEditModalVisible(false)}
         onSave={handleSaveFolder}
+        onDelete={handleDeleteFolder}
       />
     </SafeAreaView>
   );
