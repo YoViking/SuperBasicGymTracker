@@ -1,12 +1,13 @@
 import React, { useEffect, useState } from 'react';
-import { View, Text, StyleSheet, ActivityIndicator, TouchableOpacity, ScrollView, Platform, ToastAndroid } from 'react-native';
+import { View, Text, StyleSheet, ActivityIndicator, TouchableOpacity, ScrollView, Platform, ToastAndroid, Modal, Pressable } from 'react-native';
 import { supabase } from '../lib/supabase';
-import { MoreVertical, Folder as FolderIcon, Plus } from 'lucide-react-native';
+import { MoreVertical, Folder as FolderIcon, Plus, Sparkles } from 'lucide-react-native';
 import { Workout, Folder } from '../types';
 import { useRouter, useFocusEffect } from 'expo-router';
 import WorkoutMenuModal from './WorkoutMenuModal';
 import MoveToFolderModal from './MoveToFolderModal';
 import CreateFolderModal from './CreateFolderModal';
+import AiProgramWizard from './AiProgramWizard';
 import { Image } from 'expo-image';
 import { getMuscleGroupImage } from '../utils/images';
 import { decode } from 'base64-arraybuffer';
@@ -20,6 +21,8 @@ export default function SavedWorkouts() {
   const [menuVisible, setMenuVisible] = useState(false);
   const [moveModalVisible, setMoveModalVisible] = useState(false);
   const [createModalVisible, setCreateModalVisible] = useState(false);
+  const [aiWizardVisible, setAiWizardVisible] = useState(false);
+  const [createOptionsVisible, setCreateOptionsVisible] = useState(false);
   
   const [selectedWorkout, setSelectedWorkout] = useState<Workout | null>(null);
 
@@ -251,7 +254,7 @@ export default function SavedWorkouts() {
       <TouchableOpacity 
         style={styles.skapaButton}
         activeOpacity={0.8}
-        onPress={() => setCreateModalVisible(true)}
+        onPress={() => setCreateOptionsVisible(true)}
       >
         <Plus size={18} color="#F8FAFC" style={{ marginRight: 6 }} />
         <Text style={styles.skapaButtonText}>Skapa...</Text>
@@ -330,6 +333,60 @@ export default function SavedWorkouts() {
           }
         }}
         onCreate={handleCreateFolder}
+      />
+
+      {/* Selection Modal: Manual vs AI */}
+      <Modal
+        visible={createOptionsVisible}
+        transparent={true}
+        animationType="fade"
+        onRequestClose={() => setCreateOptionsVisible(false)}
+      >
+        <Pressable style={styles.modalOverlay} onPress={() => setCreateOptionsVisible(false)}>
+          <View style={styles.optionsModalContent}>
+            <Text style={styles.optionsModalTitle}>Skapa nytt program</Text>
+            
+            <TouchableOpacity 
+              style={styles.optionItem}
+              onPress={() => {
+                setCreateOptionsVisible(false);
+                setCreateModalVisible(true);
+              }}
+              activeOpacity={0.8}
+            >
+              <View style={styles.optionIconBg}>
+                <FolderIcon size={22} color="#A3E635" />
+              </View>
+              <View style={styles.optionTextContainer}>
+                <Text style={styles.optionTitle}>Skapa manuellt</Text>
+                <Text style={styles.optionDesc}>Bygg programmet och lägg till pass för hand</Text>
+              </View>
+            </TouchableOpacity>
+
+            <TouchableOpacity 
+              style={[styles.optionItem, styles.optionItemAi]}
+              onPress={() => {
+                setCreateOptionsVisible(false);
+                setAiWizardVisible(true);
+              }}
+              activeOpacity={0.8}
+            >
+              <View style={[styles.optionIconBg, styles.optionIconBgAi]}>
+                <Sparkles size={22} color="#0A0A0A" />
+              </View>
+              <View style={styles.optionTextContainer}>
+                <Text style={[styles.optionTitle, styles.optionTitleAi]}>Skapa med AI ✨</Text>
+                <Text style={styles.optionDesc}>Få ett schema anpassat efter dina mål, skador och utrustning</Text>
+              </View>
+            </TouchableOpacity>
+          </View>
+        </Pressable>
+      </Modal>
+
+      <AiProgramWizard
+        visible={aiWizardVisible}
+        onClose={() => setAiWizardVisible(false)}
+        onSaved={fetchWorkoutsAndFolders}
       />
     </ScrollView>
   );
@@ -470,5 +527,71 @@ const styles = StyleSheet.create({
     color: '#F8FAFC',
     fontSize: 16,
     fontWeight: '700',
+  },
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.85)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  optionsModalContent: {
+    backgroundColor: '#0A0A0A',
+    borderRadius: 16,
+    padding: 24,
+    width: '85%',
+    maxWidth: 400,
+    borderWidth: 1.5,
+    borderColor: '#27272A',
+  },
+  optionsModalTitle: {
+    color: '#F8FAFC',
+    fontSize: 18,
+    fontWeight: '800',
+    marginBottom: 20,
+    textAlign: 'center',
+  },
+  optionItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#18181B',
+    borderRadius: 12,
+    padding: 16,
+    marginBottom: 12,
+    borderWidth: 1.5,
+    borderColor: '#27272A',
+  },
+  optionItemAi: {
+    borderColor: '#A3E635',
+    backgroundColor: 'rgba(163, 230, 53, 0.02)',
+  },
+  optionIconBg: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    backgroundColor: '#27272A',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: 16,
+  },
+  optionIconBgAi: {
+    backgroundColor: '#A3E635',
+  },
+  optionTextContainer: {
+    flex: 1,
+  },
+  optionTitle: {
+    color: '#F8FAFC',
+    fontSize: 15,
+    fontWeight: '700',
+    marginBottom: 2,
+  },
+  optionTitleAi: {
+    color: '#A3E635',
+  },
+  optionDesc: {
+    color: '#64748B',
+    fontSize: 12,
+    lineHeight: 16,
+    fontWeight: '500',
   },
 });
