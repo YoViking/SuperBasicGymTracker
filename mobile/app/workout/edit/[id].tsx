@@ -244,7 +244,7 @@ export default function WorkoutEditScreen() {
       <SafeAreaView style={styles.safeArea}>
         <DraggableFlatList
           data={groupedExercises}
-          ListHeaderComponent={renderHeader}
+          ListHeaderComponent={renderHeader()}
           onDragEnd={({ data }) => onDragEnd(data)}
           keyExtractor={(item, index) => item.exerciseId || index.toString()}
           renderItem={renderGroup}

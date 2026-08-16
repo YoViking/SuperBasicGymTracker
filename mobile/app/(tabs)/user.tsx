@@ -1,10 +1,12 @@
-import React, { useState } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, ScrollView, Dimensions, Platform } from 'react-native';
+import React, { useState, useEffect } from 'react';
+import { View, Text, StyleSheet, TouchableOpacity, ScrollView, Dimensions, TextInput, Platform, ToastAndroid } from 'react-native';
 import { supabase } from '../../src/lib/supabase';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { Scale } from 'lucide-react-native';
 import WeeklyStats from '../../src/components/statistics/WeeklyStats';
 import MonthlyStats from '../../src/components/statistics/MonthlyStats';
 import YearlyStats from '../../src/components/statistics/YearlyStats';
+import { getUserBodyWeight, saveUserBodyWeight, DEFAULT_BODY_WEIGHT } from '../../src/utils/volume';
 
 const { width } = Dimensions.get('window');
 const TABS = ['Veckan', 'Månad', 'År'];
@@ -12,15 +14,31 @@ const TABS = ['Veckan', 'Månad', 'År'];
 export default function UserScreen() {
   const [activeTab, setActiveTab] = useState(0);
   const [userEmail, setUserEmail] = useState<string>('');
+  const [bodyWeightText, setBodyWeightText] = useState<string>('');
 
-  React.useEffect(() => {
+  useEffect(() => {
     supabase.auth.getUser().then(({ data: { user } }) => {
       if (user) setUserEmail(user.email || '');
+    });
+
+    getUserBodyWeight().then(weight => {
+      setBodyWeightText(weight ? weight.toString() : DEFAULT_BODY_WEIGHT.toString());
     });
   }, []);
 
   const handleSignOut = async () => {
     await supabase.auth.signOut();
+  };
+
+  const handleSaveWeight = async () => {
+    const parsed = parseFloat(bodyWeightText.replace(',', '.'));
+    if (!isNaN(parsed) && parsed > 0 && parsed < 400) {
+      await saveUserBodyWeight(parsed);
+      setBodyWeightText(parsed.toString());
+      if (Platform.OS === 'android') {
+        ToastAndroid.show(`Kroppsvikt sparad: ${parsed} kg`, ToastAndroid.SHORT);
+      }
+    }
   };
 
   return (
@@ -31,6 +49,30 @@ export default function UserScreen() {
         <TouchableOpacity style={styles.signOutButton} onPress={handleSignOut}>
           <Text style={styles.signOutText}>Sign out</Text>
         </TouchableOpacity>
+      </View>
+
+      {/* Body Weight Setting Card */}
+      <View style={styles.weightCard}>
+        <View style={styles.weightIconWrapper}>
+          <Scale size={20} color="#A3E635" />
+        </View>
+        <View style={styles.weightInfo}>
+          <Text style={styles.weightTitle}>Min Kroppsvikt</Text>
+          <Text style={styles.weightDesc}>Används för volymberäkning vid kroppsviktsövningar</Text>
+        </View>
+        <View style={styles.weightInputGroup}>
+          <TextInput
+            style={styles.weightInput}
+            value={bodyWeightText}
+            onChangeText={setBodyWeightText}
+            onEndEditing={handleSaveWeight}
+            keyboardType="numeric"
+            placeholder="75"
+            placeholderTextColor="#64748B"
+            maxLength={5}
+          />
+          <Text style={styles.weightUnit}>kg</Text>
+        </View>
       </View>
 
       {/* Custom Tabs */}
@@ -120,6 +162,66 @@ const styles = StyleSheet.create({
     color: '#FF3B3E',
     fontSize: 12,
     fontWeight: '600',
+  },
+  weightCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#18181B',
+    marginHorizontal: 16,
+    marginBottom: 16,
+    padding: 14,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: '#27272A',
+  },
+  weightIconWrapper: {
+    width: 36,
+    height: 36,
+    borderRadius: 8,
+    backgroundColor: 'rgba(163, 230, 53, 0.1)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: 12,
+  },
+  weightInfo: {
+    flex: 1,
+    marginRight: 12,
+  },
+  weightTitle: {
+    color: '#F8FAFC',
+    fontSize: 14,
+    fontWeight: '700',
+    marginBottom: 2,
+  },
+  weightDesc: {
+    color: '#64748B',
+    fontSize: 11,
+    fontWeight: '500',
+    lineHeight: 14,
+  },
+  weightInputGroup: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#27272A',
+    borderRadius: 8,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderWidth: 1,
+    borderColor: '#3F3F46',
+  },
+  weightInput: {
+    color: '#A3E635',
+    fontSize: 16,
+    fontWeight: '700',
+    minWidth: 38,
+    textAlign: 'right',
+    padding: 0,
+  },
+  weightUnit: {
+    color: '#94A3B8',
+    fontSize: 13,
+    fontWeight: '600',
+    marginLeft: 4,
   },
   tabsContainer: {
     flexDirection: 'row',

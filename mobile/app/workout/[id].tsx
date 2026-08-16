@@ -9,6 +9,7 @@ import { Workout } from '../../src/types';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { getMuscleGroupImage } from '../../src/utils/images';
 import WorkoutPlayer from '../../src/components/WorkoutPlayer';
+import { calculateSetVolume, getUserBodyWeight } from '../../src/utils/volume';
 
 const { width } = Dimensions.get('window');
 
@@ -27,6 +28,7 @@ interface FetchedWorkoutExercise {
     name: string;
     muscle_group: string;
     gifUrl?: string;
+    equipment?: string;
   };
 }
 
@@ -35,6 +37,7 @@ interface GroupedExercise {
   exerciseId: string;
   exerciseName: string;
   muscleGroup: string;
+  equipment?: string;
   gifUrl?: string;
   sets: FetchedWorkoutExercise[];
   order_index: number;
@@ -178,7 +181,7 @@ export default function WorkoutDetailScreen() {
         .from('workout_exercises')
         .select(`
           *,
-          exercise:exercise_library(name, muscle_group, "gifUrl")
+          exercise:exercise_library(name, muscle_group, "gifUrl", equipment)
         `)
         .eq('workout_id', id)
         .order('order_index', { ascending: true })
@@ -200,6 +203,7 @@ export default function WorkoutDetailScreen() {
               exerciseId: row.exercise_id,
               exerciseName: row.exercise.name,
               muscleGroup: row.exercise.muscle_group,
+              equipment: row.exercise.equipment,
               gifUrl: row.exercise.gifUrl,
               sets: [],
               order_index: row.order_index ?? 0
@@ -255,13 +259,20 @@ export default function WorkoutDetailScreen() {
       setIsWorkoutActive(false);
 
       let totalVolume = 0;
+      const userWeight = await getUserBodyWeight();
       const exerciseLogs: any[] = [];
       
       groupedExercises.forEach(group => {
         const doneSets = group.sets.filter(s => s.is_done);
         if (doneSets.length > 0) {
           doneSets.forEach(set => {
-            totalVolume += (set.reps * set.weight);
+            totalVolume += calculateSetVolume(
+              set.reps,
+              set.weight,
+              group.exerciseName,
+              group.equipment,
+              userWeight
+            );
           });
           exerciseLogs.push({
             exercise_name: group.exerciseName,
