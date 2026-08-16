@@ -38,6 +38,7 @@ function RootLayoutNav() {
       <Stack.Screen name="workout/replace/[workoutId]/[oldExerciseId]" options={{ headerShown: false }} />
       <Stack.Screen name="archive" options={{ headerShown: false }} />
       <Stack.Screen name="folder/[id]" options={{ headerShown: false }} />
+      <Stack.Screen name="body-weight" options={{ headerShown: false }} />
       <Stack.Screen name="choose-workout" options={{ presentation: 'modal', headerShown: false }} />
       <Stack.Screen name="create-workout" options={{ presentation: 'modal', headerShown: false }} />
     </Stack>

@@ -2,7 +2,28 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { supabase } from '../lib/supabase';
 
 const STORAGE_KEY = '@user_body_weight';
+const STORAGE_HISTORY_KEY = '@user_body_weight_history';
 export const DEFAULT_BODY_WEIGHT = 75;
+
+export interface BodyWeightEntry {
+  id: string;
+  weight: number;
+  date: string; // ISO string
+  created_at: string;
+}
+
+export function formatWeightDate(dateStr: string): string {
+  try {
+    const d = new Date(dateStr);
+    const day = d.getDate();
+    const months = ['jan', 'feb', 'mar', 'apr', 'maj', 'jun', 'jul', 'aug', 'sep', 'okt', 'nov', 'dec'];
+    const month = months[d.getMonth()] || '';
+    const year = d.getFullYear();
+    return `${day} ${month} ${year}`;
+  } catch {
+    return dateStr;
+  }
+}
 
 /**
  * Checks if an exercise relies on bodyweight based on equipment and naming patterns.
@@ -152,5 +173,75 @@ export async function saveUserBodyWeight(weight: number): Promise<void> {
     });
   } catch (error) {
     console.error('Error saving user body weight:', error);
+  }
+}
+
+/**
+ * Fetches the user's body weight history.
+ */
+export async function getBodyWeightHistory(): Promise<BodyWeightEntry[]> {
+  try {
+    const cached = await AsyncStorage.getItem(STORAGE_HISTORY_KEY);
+    if (cached) {
+      const parsed: BodyWeightEntry[] = JSON.parse(cached);
+      if (Array.isArray(parsed) && parsed.length > 0) {
+        return parsed.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+      }
+    }
+
+    const { data: { user } } = await supabase.auth.getUser();
+    if (user?.user_metadata?.body_weight_history && Array.isArray(user.user_metadata.body_weight_history)) {
+      const history: BodyWeightEntry[] = user.user_metadata.body_weight_history;
+      await AsyncStorage.setItem(STORAGE_HISTORY_KEY, JSON.stringify(history));
+      return history.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+    }
+
+    // Seed with current weight if history is empty
+    const currentWeight = await getUserBodyWeight();
+    const initialEntry: BodyWeightEntry = {
+      id: Date.now().toString(),
+      weight: currentWeight,
+      date: new Date().toISOString(),
+      created_at: new Date().toISOString(),
+    };
+    await AsyncStorage.setItem(STORAGE_HISTORY_KEY, JSON.stringify([initialEntry]));
+    return [initialEntry];
+  } catch (error) {
+    console.error('Error getting body weight history:', error);
+    return [];
+  }
+}
+
+/**
+ * Adds a new body weight measurement and updates current body weight.
+ */
+export async function addBodyWeightEntry(weight: number, date?: string): Promise<BodyWeightEntry[]> {
+  if (isNaN(weight) || weight <= 0) return [];
+  try {
+    const history = await getBodyWeightHistory();
+    const newEntry: BodyWeightEntry = {
+      id: Date.now().toString(),
+      weight,
+      date: date || new Date().toISOString(),
+      created_at: new Date().toISOString(),
+    };
+
+    const updated = [newEntry, ...history.filter(h => h.id !== newEntry.id)];
+    updated.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+
+    await AsyncStorage.setItem(STORAGE_HISTORY_KEY, JSON.stringify(updated));
+    await AsyncStorage.setItem(STORAGE_KEY, weight.toString());
+
+    await supabase.auth.updateUser({
+      data: {
+        body_weight: weight,
+        body_weight_history: updated,
+      }
+    });
+
+    return updated;
+  } catch (error) {
+    console.error('Error adding body weight entry:', error);
+    return [];
   }
 }

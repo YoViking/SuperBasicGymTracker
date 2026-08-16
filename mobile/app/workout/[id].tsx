@@ -252,6 +252,28 @@ export default function WorkoutDetailScreen() {
     }
   };
 
+  const handleUpdateSet = async (setId: string, reps: number, weight: number) => {
+    setGroupedExercises(prev => prev.map(group => ({
+      ...group,
+      sets: group.sets.map(s => s.id === setId ? { ...s, reps, weight } : s)
+    })));
+
+    try {
+      if (!setId.startsWith('tmp-')) {
+        const { error } = await supabase
+          .from('workout_exercises')
+          .update({ reps, weight })
+          .eq('id', setId);
+        
+        if (error) {
+          console.error('Error updating set in database:', error);
+        }
+      }
+    } catch (error) {
+      console.error('Error in handleUpdateSet:', error);
+    }
+  };
+
   const finishWorkout = async () => {
     if (!workout || !id) return;
     try {
@@ -476,6 +498,7 @@ export default function WorkoutDetailScreen() {
             onNext={handleNextExercise}
             onPrevious={handlePreviousExercise}
             onToggleSet={toggleSetStatus}
+            onUpdateSet={handleUpdateSet}
             workoutTimeElapsed={workoutTimeElapsed}
             isWorkoutActive={isWorkoutActive}
             setIsWorkoutActive={setIsWorkoutActive}

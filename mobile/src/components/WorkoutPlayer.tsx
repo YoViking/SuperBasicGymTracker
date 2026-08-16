@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, Modal, Dimensions, Platform, ScrollView, AppState } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, Modal, Dimensions, Platform, ScrollView, AppState, TextInput, KeyboardAvoidingView, Keyboard } from 'react-native';
 import { Image } from 'expo-image';
-import { Play, Pause, SkipForward, SkipBack, Timer, MoreHorizontal, Check, ChevronDown } from 'lucide-react-native';
+import { Play, Pause, SkipForward, SkipBack, Timer, MoreHorizontal, Check, ChevronDown, X } from 'lucide-react-native';
 import { Audio } from 'expo-av';
 import * as Notifications from 'expo-notifications';
 import { getMuscleGroupImage } from '../utils/images';
@@ -25,6 +25,7 @@ interface WorkoutPlayerProps {
   onNext: () => void;
   onPrevious: () => void;
   onToggleSet: (setId: string, currentStatus: boolean) => void;
+  onUpdateSet?: (setId: string, reps: number, weight: number) => void;
   workoutTimeElapsed: number;
   isWorkoutActive: boolean;
   setIsWorkoutActive: (b: boolean) => void;
@@ -39,12 +40,54 @@ export default function WorkoutPlayer({
   onNext,
   onPrevious,
   onToggleSet,
+  onUpdateSet,
   workoutTimeElapsed,
   isWorkoutActive,
   setIsWorkoutActive,
   progressPercentage,
   onOptionsPress
 }: WorkoutPlayerProps) {
+  // Editing state for sets
+  const [editingSetId, setEditingSetId] = useState<string | null>(null);
+  const [editReps, setEditReps] = useState<string>('');
+  const [editWeight, setEditWeight] = useState<string>('');
+
+  const handleStartEdit = (set: any) => {
+    setEditingSetId(set.id);
+    setEditReps(String(set.reps ?? ''));
+    setEditWeight(String(set.weight ?? ''));
+  };
+
+  const handleCancelEdit = () => {
+    Keyboard.dismiss();
+    setEditingSetId(null);
+    setEditReps('');
+    setEditWeight('');
+  };
+
+  const handleSaveEdit = () => {
+    if (!editingSetId) return;
+    Keyboard.dismiss();
+    const parsedReps = parseInt(editReps, 10) || 0;
+    const parsedWeight = parseFloat(editWeight.replace(',', '.')) || 0;
+
+    if (onUpdateSet) {
+      onUpdateSet(editingSetId, parsedReps, parsedWeight);
+    }
+
+    if (activeExercise?.sets) {
+      const targetSet = activeExercise.sets.find((s: any) => s.id === editingSetId);
+      if (targetSet) {
+        targetSet.reps = parsedReps;
+        targetSet.weight = parsedWeight;
+      }
+    }
+
+    setEditingSetId(null);
+    setEditReps('');
+    setEditWeight('');
+  };
+
   // When a set is checked off, we handle it
   const handleToggleSet = (setId: string, currentStatus: boolean) => {
     onToggleSet(setId, currentStatus);
@@ -280,97 +323,203 @@ export default function WorkoutPlayer({
         visible={isExpanded}
         animationType="slide"
         presentationStyle="fullScreen"
-        onRequestClose={() => setIsExpanded(false)}
+        onRequestClose={() => {
+          if (editingSetId) {
+            handleCancelEdit();
+          } else {
+            setIsExpanded(false);
+          }
+        }}
       >
-        <View style={styles.modalContainer}>
-          <TouchableOpacity style={styles.collapseButton} onPress={() => setIsExpanded(false)}>
-            <ChevronDown size={32} color="#F8FAFC" />
-          </TouchableOpacity>
+        <KeyboardAvoidingView 
+          style={{ flex: 1, backgroundColor: '#0A0A0A' }}
+          behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+        >
+          <View style={styles.modalContainer}>
+            <TouchableOpacity 
+              style={styles.collapseButton} 
+              onPress={() => {
+                if (editingSetId) {
+                  handleCancelEdit();
+                } else {
+                  setIsExpanded(false);
+                }
+              }}
+            >
+              <ChevronDown size={32} color="#F8FAFC" />
+            </TouchableOpacity>
 
-          {activeExercise.gifUrl ? (
-            <Image
-              source={{ uri: activeExercise.gifUrl }}
-              style={styles.largeImage}
-              contentFit="cover"
-              autoplay={isWorkoutActive}
-            />
-          ) : (
-            <Image
-              source={getMuscleGroupImage(activeExercise.muscleGroup)}
-              style={styles.largeImage}
-              contentFit="contain"
-              autoplay={false}
-            />
-          )}
+            {editingSetId ? (
+              <View style={styles.compactHeader}>
+                {activeExercise.gifUrl ? (
+                  <Image
+                    source={{ uri: activeExercise.gifUrl }}
+                    style={styles.compactThumbnail}
+                    contentFit="cover"
+                    autoplay={false}
+                  />
+                ) : (
+                  <Image
+                    source={getMuscleGroupImage(activeExercise.muscleGroup)}
+                    style={styles.compactThumbnail}
+                    contentFit="contain"
+                    autoplay={false}
+                  />
+                )}
+                <View style={styles.compactHeaderText}>
+                  <Text style={styles.compactTitle} numberOfLines={1}>{activeExercise.exerciseName}</Text>
+                  <Text style={styles.compactSubtitle}>Redigera reps & vikt</Text>
+                </View>
+              </View>
+            ) : (
+              activeExercise.gifUrl ? (
+                <Image
+                  source={{ uri: activeExercise.gifUrl }}
+                  style={styles.largeImage}
+                  contentFit="cover"
+                  autoplay={isWorkoutActive}
+                />
+              ) : (
+                <Image
+                  source={getMuscleGroupImage(activeExercise.muscleGroup)}
+                  style={styles.largeImage}
+                  contentFit="contain"
+                  autoplay={false}
+                />
+              )
+            )}
 
-          <ScrollView style={styles.exerciseDetails} contentContainerStyle={{ paddingBottom: 24 }}>
-            <Text style={styles.modalTitle}>{activeExercise.exerciseName}</Text>
+            <ScrollView 
+              style={styles.exerciseDetails} 
+              contentContainerStyle={{ paddingBottom: 32 }}
+              keyboardShouldPersistTaps="handled"
+            >
+              {!editingSetId && (
+                <Text style={styles.modalTitle}>{activeExercise.exerciseName}</Text>
+              )}
 
-            <View style={styles.setsContainer}>
-              {activeExercise.sets.map((set: any) => (
-                <View key={set.id} style={styles.setRow}>
-                  <TouchableOpacity
-                    style={[styles.checkbox, set.is_done && styles.checkboxChecked]}
-                    onPress={() => handleToggleSet(set.id, set.is_done)}
-                    activeOpacity={0.7}
-                  >
-                    {set.is_done && <Check size={16} color="#0A0A0A" strokeWidth={4} />}
-                  </TouchableOpacity>
-                  <View style={styles.setInfo}>
-                    <Text style={styles.setText}>{set.reps} reps</Text>
-                    <Text style={styles.weightText}>{set.weight} kg</Text>
+              <View style={styles.setsContainer}>
+                {activeExercise.sets.map((set: any) => {
+                  const isEditing = editingSetId === set.id;
+                  return (
+                    <View key={set.id} style={[styles.setRow, isEditing && styles.setRowEditing]}>
+                      <TouchableOpacity
+                        style={[styles.checkbox, set.is_done && styles.checkboxChecked]}
+                        onPress={() => handleToggleSet(set.id, set.is_done)}
+                        activeOpacity={0.7}
+                      >
+                        {set.is_done && <Check size={16} color="#0A0A0A" strokeWidth={4} />}
+                      </TouchableOpacity>
+                      
+                      {isEditing ? (
+                        <View style={styles.setInfoEdit}>
+                          <View style={styles.editInputsGroup}>
+                            <View style={styles.editInputWrapper}>
+                              <TextInput
+                                style={styles.editInput}
+                                value={editReps}
+                                onChangeText={setEditReps}
+                                keyboardType="numeric"
+                                selectTextOnFocus
+                                autoFocus
+                                placeholder="0"
+                                placeholderTextColor="#64748B"
+                                returnKeyType="next"
+                              />
+                              <Text style={styles.editUnitText}>reps</Text>
+                            </View>
+                            <View style={styles.editInputWrapper}>
+                              <TextInput
+                                style={styles.editInput}
+                                value={editWeight}
+                                onChangeText={setEditWeight}
+                                keyboardType="decimal-pad"
+                                selectTextOnFocus
+                                placeholder="0"
+                                placeholderTextColor="#64748B"
+                                returnKeyType="done"
+                                onSubmitEditing={handleSaveEdit}
+                              />
+                              <Text style={styles.editUnitText}>kg</Text>
+                            </View>
+                          </View>
+                          <View style={styles.editActions}>
+                            <TouchableOpacity style={styles.saveEditBtn} onPress={handleSaveEdit} activeOpacity={0.7}>
+                              <Check size={18} color="#0A0A0A" strokeWidth={3} />
+                            </TouchableOpacity>
+                            <TouchableOpacity style={styles.cancelEditBtn} onPress={handleCancelEdit} activeOpacity={0.7}>
+                              <X size={18} color="#94A3B8" />
+                            </TouchableOpacity>
+                          </View>
+                        </View>
+                      ) : (
+                        <TouchableOpacity
+                          style={styles.setInfo}
+                          onLongPress={() => handleStartEdit(set)}
+                          delayLongPress={350}
+                          activeOpacity={0.7}
+                        >
+                          <Text style={styles.setText}>{set.reps} reps</Text>
+                          <Text style={styles.weightText}>{set.weight} kg</Text>
+                        </TouchableOpacity>
+                      )}
+                    </View>
+                  );
+                })}
+              </View>
+            </ScrollView>
+
+            {!editingSetId && (
+              <>
+                <View style={styles.playerBottom}>
+                  <View style={styles.progressContainer}>
+                    <View style={styles.progressBarBg}>
+                      <View
+                        style={[
+                          styles.progressBarFill,
+                          { width: restTimerActive ? `${(restTimerSeconds / restTimerMax) * 100}%` : `${progressPercentage}%` },
+                          restTimerActive && { backgroundColor: '#A3E635' }
+                        ]}
+                      />
+                    </View>
+                    <Text style={styles.timeText}>
+                      {restTimerActive ? formatTime(restTimerSeconds) : formatTime(workoutTimeElapsed)}
+                    </Text>
+                  </View>
+
+                  <View style={styles.mainControls}>
+                    <View style={styles.playControlsGroup}>
+                      <TouchableOpacity onPress={onPrevious}>
+                        <SkipBack size={36} color="#F8FAFC" fill="#F8FAFC" />
+                      </TouchableOpacity>
+
+                      <TouchableOpacity onPress={() => setIsWorkoutActive(!isWorkoutActive)} style={styles.playButton}>
+                        {isWorkoutActive ? <Pause size={48} color="#0A0A0A" /> : <Play size={48} color="#0A0A0A" fill="#0A0A0A" />}
+                      </TouchableOpacity>
+
+                      <TouchableOpacity onPress={onNext}>
+                        <SkipForward size={36} color="#F8FAFC" fill="#F8FAFC" />
+                      </TouchableOpacity>
+                    </View>
+
+                    <TouchableOpacity
+                      style={styles.timerBtn}
+                      onPress={toggleRestTimer}
+                      onLongPress={resetRestTimer}
+                      delayLongPress={500}
+                    >
+                      <Timer size={28} color={restTimerActive ? "#A3E635" : "#F8FAFC"} />
+                    </TouchableOpacity>
                   </View>
                 </View>
-              ))}
-            </View>
-          </ScrollView>
 
-          <View style={styles.playerBottom}>
-            <View style={styles.progressContainer}>
-              <View style={styles.progressBarBg}>
-                <View
-                  style={[
-                    styles.progressBarFill,
-                    { width: restTimerActive ? `${(restTimerSeconds / restTimerMax) * 100}%` : `${progressPercentage}%` },
-                    restTimerActive && { backgroundColor: '#A3E635' }
-                  ]}
-                />
-              </View>
-              <Text style={styles.timeText}>
-                {restTimerActive ? formatTime(restTimerSeconds) : formatTime(workoutTimeElapsed)}
-              </Text>
-            </View>
-
-            <View style={styles.mainControls}>
-              <View style={styles.playControlsGroup}>
-                <TouchableOpacity onPress={onPrevious}>
-                  <SkipBack size={36} color="#F8FAFC" fill="#F8FAFC" />
+                <TouchableOpacity style={styles.moreBtn} onPress={onOptionsPress}>
+                  <MoreHorizontal size={24} color="#94A3B8" />
                 </TouchableOpacity>
-
-                <TouchableOpacity onPress={() => setIsWorkoutActive(!isWorkoutActive)} style={styles.playButton}>
-                  {isWorkoutActive ? <Pause size={48} color="#0A0A0A" /> : <Play size={48} color="#0A0A0A" fill="#0A0A0A" />}
-                </TouchableOpacity>
-
-                <TouchableOpacity onPress={onNext}>
-                  <SkipForward size={36} color="#F8FAFC" fill="#F8FAFC" />
-                </TouchableOpacity>
-              </View>
-
-              <TouchableOpacity
-                style={styles.timerBtn}
-                onPress={toggleRestTimer}
-                onLongPress={resetRestTimer}
-                delayLongPress={500}
-              >
-                <Timer size={28} color={restTimerActive ? "#A3E635" : "#F8FAFC"} />
-              </TouchableOpacity>
-            </View>
+              </>
+            )}
           </View>
-
-          <TouchableOpacity style={styles.moreBtn} onPress={onOptionsPress}>
-            <MoreHorizontal size={24} color="#94A3B8" />
-          </TouchableOpacity>
-        </View>
+        </KeyboardAvoidingView>
       </Modal>
     </>
   );
@@ -433,6 +582,39 @@ const styles = StyleSheet.create({
     marginBottom: 16,
     borderRadius: 16, // Optional: add some rounding if desired, though 1:1 square is fine
   },
+  compactHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    marginHorizontal: 16,
+    marginBottom: 12,
+    backgroundColor: '#18181B',
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: '#27272A',
+    gap: 12,
+  },
+  compactThumbnail: {
+    width: 44,
+    height: 44,
+    borderRadius: 8,
+    backgroundColor: '#FFFFFF',
+  },
+  compactHeaderText: {
+    flex: 1,
+  },
+  compactTitle: {
+    color: '#F8FAFC',
+    fontSize: 17,
+    fontWeight: '700',
+  },
+  compactSubtitle: {
+    color: '#A3E635',
+    fontSize: 12,
+    fontWeight: '500',
+    marginTop: 2,
+  },
   exerciseDetails: {
     paddingHorizontal: 16,
     flex: 1,
@@ -449,6 +631,15 @@ const styles = StyleSheet.create({
   setRow: {
     flexDirection: 'row',
     alignItems: 'center',
+    minHeight: 44,
+  },
+  setRowEditing: {
+    backgroundColor: '#18181B',
+    paddingVertical: 6,
+    paddingHorizontal: 10,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: '#3F3F46',
   },
   checkbox: {
     width: 28,
@@ -476,6 +667,65 @@ const styles = StyleSheet.create({
     color: '#F8FAFC',
     fontSize: 18,
     fontWeight: '500',
+  },
+  setInfoEdit: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  editInputsGroup: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    flex: 1,
+  },
+  editInputWrapper: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#1E2024',
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: '#3F3F46',
+    paddingHorizontal: 8,
+    height: 38,
+  },
+  editInput: {
+    color: '#F8FAFC',
+    fontSize: 16,
+    fontWeight: '600',
+    minWidth: 32,
+    textAlign: 'center',
+    paddingVertical: 2,
+    paddingHorizontal: 4,
+  },
+  editUnitText: {
+    color: '#94A3B8',
+    fontSize: 13,
+    fontWeight: '500',
+    marginLeft: 2,
+  },
+  editActions: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    marginLeft: 8,
+  },
+  saveEditBtn: {
+    backgroundColor: '#A3E635',
+    borderRadius: 8,
+    width: 34,
+    height: 34,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  cancelEditBtn: {
+    backgroundColor: '#27272A',
+    borderRadius: 8,
+    width: 34,
+    height: 34,
+    justifyContent: 'center',
+    alignItems: 'center',
   },
   playerBottom: {
     paddingHorizontal: 24,
