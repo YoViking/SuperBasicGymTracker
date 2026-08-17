@@ -1,5 +1,21 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, Modal, Dimensions, Platform, ScrollView, AppState, TextInput, KeyboardAvoidingView, Keyboard } from 'react-native';
+import { 
+  View, 
+  Text, 
+  StyleSheet, 
+  TouchableOpacity, 
+  Modal, 
+  Dimensions, 
+  Platform, 
+  ScrollView, 
+  AppState, 
+  TextInput, 
+  KeyboardAvoidingView, 
+  Keyboard,
+  Animated,
+  PanResponder,
+  Easing
+} from 'react-native';
 import { Image } from 'expo-image';
 import { Play, Pause, SkipForward, SkipBack, Timer, MoreHorizontal, Check, ChevronDown, X } from 'lucide-react-native';
 import { Audio } from 'expo-av';
@@ -16,7 +32,7 @@ Notifications.setNotificationHandler({
   }),
 });
 
-const { width, height } = Dimensions.get('window');
+const { width, height: SCREEN_HEIGHT } = Dimensions.get('window');
 
 interface WorkoutPlayerProps {
   activeExercise: any; // Using any here to avoid cyclic imports, or we can just pass the necessary data
@@ -51,6 +67,131 @@ export default function WorkoutPlayer({
   const [editingSetId, setEditingSetId] = useState<string | null>(null);
   const [editReps, setEditReps] = useState<string>('');
   const [editWeight, setEditWeight] = useState<string>('');
+
+  // Bottom sheet animation & modal visibility state
+  const [modalVisible, setModalVisible] = useState(isExpanded);
+  const panY = useRef(new Animated.Value(SCREEN_HEIGHT)).current;
+  const scrollOffset = useRef(0);
+
+  const resetPosition = () => {
+    Animated.spring(panY, {
+      toValue: 0,
+      damping: 24,
+      stiffness: 240,
+      mass: 0.7,
+      useNativeDriver: true,
+    }).start();
+  };
+
+  const closeModal = (velocity: number = 0) => {
+    if (editingSetId) {
+      Keyboard.dismiss();
+      setEditingSetId(null);
+    }
+    const duration = Math.max(140, Math.min(240, 240 - velocity * 40));
+    Animated.timing(panY, {
+      toValue: SCREEN_HEIGHT,
+      duration,
+      easing: Easing.out(Easing.cubic),
+      useNativeDriver: true,
+    }).start(() => {
+      setIsExpanded(false);
+      setModalVisible(false);
+    });
+  };
+
+  useEffect(() => {
+    if (isExpanded) {
+      setModalVisible(true);
+      panY.setValue(SCREEN_HEIGHT);
+      scrollOffset.current = 0;
+      Animated.spring(panY, {
+        toValue: 0,
+        damping: 26,
+        stiffness: 220,
+        mass: 0.8,
+        useNativeDriver: true,
+      }).start();
+    } else {
+      Animated.timing(panY, {
+        toValue: SCREEN_HEIGHT,
+        duration: 200,
+        easing: Easing.out(Easing.cubic),
+        useNativeDriver: true,
+      }).start(() => {
+        setModalVisible(false);
+      });
+    }
+  }, [isExpanded]);
+
+  const isSwipeDown = (gestureState: any) => {
+    return gestureState.dy > 6 && Math.abs(gestureState.dy) > Math.abs(gestureState.dx) * 1.1;
+  };
+
+  // Dedicated PanResponder for the exercise image: instant capture on touch down
+  const imagePanResponder = useRef(
+    PanResponder.create({
+      onStartShouldSetPanResponder: () => true,
+      onStartShouldSetPanResponderCapture: () => true,
+      onMoveShouldSetPanResponder: () => true,
+      onMoveShouldSetPanResponderCapture: () => true,
+      onPanResponderGrant: () => {
+        panY.stopAnimation();
+      },
+      onPanResponderMove: (_, gestureState) => {
+        if (gestureState.dy > 0) {
+          panY.setValue(gestureState.dy);
+        } else {
+          // Subtle resistance when pulling up
+          panY.setValue(gestureState.dy * 0.15);
+        }
+      },
+      onPanResponderRelease: (_, gestureState) => {
+        // High responsiveness: collapse if dragged down > 50px or swiped with downward velocity
+        if (gestureState.dy > 50 || (gestureState.dy > 15 && gestureState.vy > 0.2)) {
+          closeModal(gestureState.vy);
+        } else {
+          resetPosition();
+        }
+      },
+      onPanResponderTerminate: () => {
+        resetPosition();
+      },
+    })
+  ).current;
+
+  const panResponder = useRef(
+    PanResponder.create({
+      onStartShouldSetPanResponder: () => false,
+      onStartShouldSetPanResponderCapture: () => false,
+      onMoveShouldSetPanResponder: (_, gestureState) => {
+        return isSwipeDown(gestureState) && scrollOffset.current <= 1;
+      },
+      onMoveShouldSetPanResponderCapture: (_, gestureState) => {
+        return isSwipeDown(gestureState) && scrollOffset.current <= 1;
+      },
+      onPanResponderGrant: () => {
+        panY.stopAnimation();
+      },
+      onPanResponderMove: (_, gestureState) => {
+        if (gestureState.dy > 0) {
+          panY.setValue(gestureState.dy);
+        } else {
+          panY.setValue(gestureState.dy * 0.15);
+        }
+      },
+      onPanResponderRelease: (_, gestureState) => {
+        if (gestureState.dy > 60 || (gestureState.dy > 20 && gestureState.vy > 0.3)) {
+          closeModal(gestureState.vy);
+        } else {
+          resetPosition();
+        }
+      },
+      onPanResponderTerminate: () => {
+        resetPosition();
+      },
+    })
+  ).current;
 
   const handleStartEdit = (set: any) => {
     setEditingSetId(set.id);
@@ -318,86 +459,141 @@ export default function WorkoutPlayer({
         </TouchableOpacity>
       )}
 
-      {/* Upfolded Modal */}
+      {/* Expanded Bottom Sheet Modal */}
       <Modal
-        visible={isExpanded}
-        animationType="slide"
-        presentationStyle="fullScreen"
+        visible={modalVisible}
+        transparent={true}
+        animationType="none"
+        statusBarTranslucent={true}
         onRequestClose={() => {
           if (editingSetId) {
             handleCancelEdit();
           } else {
-            setIsExpanded(false);
+            closeModal();
           }
         }}
       >
         <KeyboardAvoidingView 
-          style={{ flex: 1, backgroundColor: '#0A0A0A' }}
+          style={styles.modalRoot}
           behavior={Platform.OS === 'ios' ? 'padding' : undefined}
         >
-          <View style={styles.modalContainer}>
+          {/* Backdrop Overlay */}
+          <Animated.View 
+            style={[
+              styles.modalBackdrop,
+              {
+                opacity: panY.interpolate({
+                  inputRange: [0, SCREEN_HEIGHT * 0.6],
+                  outputRange: [1, 0],
+                  extrapolate: 'clamp',
+                }),
+              },
+            ]}
+          >
             <TouchableOpacity 
-              style={styles.collapseButton} 
-              onPress={() => {
-                if (editingSetId) {
-                  handleCancelEdit();
-                } else {
-                  setIsExpanded(false);
-                }
-              }}
-            >
-              <ChevronDown size={32} color="#F8FAFC" />
-            </TouchableOpacity>
+              style={StyleSheet.absoluteFill} 
+              activeOpacity={1} 
+              onPress={() => closeModal()} 
+            />
+          </Animated.View>
 
-            {editingSetId ? (
-              <View style={styles.compactHeader}>
-                {activeExercise.gifUrl ? (
-                  <Image
-                    source={{ uri: activeExercise.gifUrl }}
-                    style={styles.compactThumbnail}
-                    contentFit="cover"
-                    autoplay={false}
-                  />
-                ) : (
-                  <Image
-                    source={getMuscleGroupImage(activeExercise.muscleGroup)}
-                    style={styles.compactThumbnail}
-                    contentFit="contain"
-                    autoplay={false}
-                  />
-                )}
-                <View style={styles.compactHeaderText}>
-                  <Text style={styles.compactTitle} numberOfLines={1}>{activeExercise.exerciseName}</Text>
-                  <Text style={styles.compactSubtitle}>Redigera reps & vikt</Text>
-                </View>
+          {/* Animated Sheet Container */}
+          <Animated.View 
+            {...panResponder.panHandlers}
+            style={[
+              styles.modalContainer,
+              {
+                transform: [{ translateY: panY }],
+              },
+            ]}
+          >
+            {/* Top Drag & Header Zone */}
+            <View style={styles.dragHeaderZone}>
+              <View style={styles.dragHandleContainer}>
+                <View style={styles.dragHandle} />
               </View>
-            ) : (
-              activeExercise.gifUrl ? (
-                <Image
-                  source={{ uri: activeExercise.gifUrl }}
-                  style={styles.largeImage}
-                  contentFit="cover"
-                  autoplay={isWorkoutActive}
-                />
-              ) : (
-                <Image
-                  source={getMuscleGroupImage(activeExercise.muscleGroup)}
-                  style={styles.largeImage}
-                  contentFit="contain"
-                  autoplay={false}
-                />
-              )
-            )}
 
+              <TouchableOpacity 
+                style={styles.collapseButton} 
+                onPress={() => {
+                  if (editingSetId) {
+                    handleCancelEdit();
+                  } else {
+                    closeModal();
+                  }
+                }}
+                activeOpacity={0.7}
+                hitSlop={{ top: 10, bottom: 10, left: 20, right: 20 }}
+              >
+                <ChevronDown size={28} color="#94A3B8" />
+              </TouchableOpacity>
+
+              {/* Dedicated Image Drag Zone with instant touch capture */}
+              <View 
+                {...imagePanResponder.panHandlers} 
+                style={styles.imageDragZone}
+                collapsable={false}
+              >
+                {editingSetId ? (
+                  <View style={styles.compactHeader}>
+                    {activeExercise.gifUrl ? (
+                      <Image
+                        source={{ uri: activeExercise.gifUrl }}
+                        style={styles.compactThumbnail}
+                        contentFit="cover"
+                        autoplay={false}
+                        pointerEvents="none"
+                      />
+                    ) : (
+                      <Image
+                        source={getMuscleGroupImage(activeExercise.muscleGroup)}
+                        style={styles.compactThumbnail}
+                        contentFit="contain"
+                        autoplay={false}
+                        pointerEvents="none"
+                      />
+                    )}
+                    <View style={styles.compactHeaderText}>
+                      <Text style={styles.compactTitle} numberOfLines={1}>{activeExercise.exerciseName}</Text>
+                      <Text style={styles.compactSubtitle}>Redigera reps & vikt</Text>
+                    </View>
+                  </View>
+                ) : (
+                  <>
+                    {activeExercise.gifUrl ? (
+                      <Image
+                        source={{ uri: activeExercise.gifUrl }}
+                        style={styles.largeImage}
+                        contentFit="cover"
+                        autoplay={isWorkoutActive}
+                        pointerEvents="none"
+                      />
+                    ) : (
+                      <Image
+                        source={getMuscleGroupImage(activeExercise.muscleGroup)}
+                        style={styles.largeImage}
+                        contentFit="contain"
+                        autoplay={false}
+                        pointerEvents="none"
+                      />
+                    )}
+                    <Text style={styles.modalTitle}>{activeExercise.exerciseName}</Text>
+                  </>
+                )}
+              </View>
+            </View>
+
+            {/* Scrollable Sets Details */}
             <ScrollView 
               style={styles.exerciseDetails} 
               contentContainerStyle={{ paddingBottom: 32 }}
               keyboardShouldPersistTaps="handled"
+              onScroll={(e) => {
+                scrollOffset.current = e.nativeEvent.contentOffset.y;
+              }}
+              scrollEventThrottle={16}
+              bounces={false}
             >
-              {!editingSetId && (
-                <Text style={styles.modalTitle}>{activeExercise.exerciseName}</Text>
-              )}
-
               <View style={styles.setsContainer}>
                 {activeExercise.sets.map((set: any) => {
                   const isEditing = editingSetId === set.id;
@@ -518,7 +714,7 @@ export default function WorkoutPlayer({
                 </TouchableOpacity>
               </>
             )}
-          </View>
+          </Animated.View>
         </KeyboardAvoidingView>
       </Modal>
     </>
@@ -565,22 +761,61 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
   },
+  modalRoot: {
+    flex: 1,
+    justifyContent: 'flex-end',
+  },
+  modalBackdrop: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: 'rgba(0, 0, 0, 0.75)',
+  },
   modalContainer: {
     flex: 1,
     backgroundColor: '#0A0A0A',
-    paddingTop: Platform.OS === 'ios' ? 40 : 20,
+    borderTopLeftRadius: 24,
+    borderTopRightRadius: 24,
+    marginTop: Platform.OS === 'ios' ? 48 : 40,
+    overflow: 'hidden',
+    borderTopWidth: 1,
+    borderTopColor: '#27272A',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: -4 },
+    shadowOpacity: 0.4,
+    shadowRadius: 12,
+    elevation: 20,
+  },
+  dragHeaderZone: {
+    paddingTop: 4,
+  },
+  dragHandleContainer: {
+    width: '100%',
+    alignItems: 'center',
+    paddingVertical: 6,
+  },
+  dragHandle: {
+    width: 44,
+    height: 5,
+    backgroundColor: '#3F3F46',
+    borderRadius: 3,
   },
   collapseButton: {
     alignItems: 'center',
-    padding: 8,
+    paddingVertical: 2,
+    marginBottom: 2,
+  },
+  imageDragZone: {
+    width: '100%',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 16,
   },
   largeImage: {
     width: width * 0.75,
     height: width * 0.75,
     backgroundColor: '#FFFFFF',
     alignSelf: 'center',
-    marginBottom: 16,
-    borderRadius: 16, // Optional: add some rounding if desired, though 1:1 square is fine
+    marginBottom: 12,
+    borderRadius: 16,
   },
   compactHeader: {
     flexDirection: 'row',
@@ -594,6 +829,7 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: '#27272A',
     gap: 12,
+    width: '100%',
   },
   compactThumbnail: {
     width: 44,
@@ -623,7 +859,9 @@ const styles = StyleSheet.create({
     color: '#F8FAFC',
     fontSize: 24,
     fontWeight: '700',
-    marginBottom: 16,
+    marginBottom: 12,
+    alignSelf: 'flex-start',
+    paddingHorizontal: 4,
   },
   setsContainer: {
     gap: 16,
@@ -788,3 +1026,4 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   }
 });
+
