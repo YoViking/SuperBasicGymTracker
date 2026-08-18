@@ -28,9 +28,10 @@ function RootLayoutNav() {
   }, [session, loading, segments]);
 
   return (
-    <Stack>
+    <Stack screenOptions={{ headerShown: false }}>
       <Stack.Screen name="auth" options={{ headerShown: false }} />
       <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
+      <Stack.Screen name="settings" options={{ headerShown: false }} />
       <Stack.Screen name="exercise/[id]" options={{ headerShown: false }} />
       <Stack.Screen name="workout/[id]" options={{ headerShown: false }} />
       <Stack.Screen name="workout/edit/[id]" options={{ headerShown: false }} />

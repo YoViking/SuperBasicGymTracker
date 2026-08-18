@@ -20,7 +20,9 @@ import { Image } from 'expo-image';
 import { Play, Pause, SkipForward, SkipBack, Timer, MoreHorizontal, Check, ChevronDown, X } from 'lucide-react-native';
 import { Audio } from 'expo-av';
 import * as Notifications from 'expo-notifications';
+import { activateKeepAwakeAsync, deactivateKeepAwake } from 'expo-keep-awake';
 import { getMuscleGroupImage } from '../utils/images';
+import { getRestTimerInterval, getKeepAwakeSetting } from '../utils/settings';
 
 Notifications.setNotificationHandler({
   handleNotification: async () => ({
@@ -243,11 +245,31 @@ export default function WorkoutPlayer({
     }
   };
 
+  const [restTimerInterval, setRestTimerInterval] = useState(30);
   const [restTimerActive, setRestTimerActive] = useState(false);
   const [restTimerSeconds, setRestTimerSeconds] = useState(30);
   const [restTimerMax, setRestTimerMax] = useState(30);
   const [sound, setSound] = useState<Audio.Sound | null>(null);
   const scheduledNotificationIdRef = useRef<string | null>(null);
+
+  useEffect(() => {
+    getRestTimerInterval().then(interval => {
+      setRestTimerInterval(interval);
+      setRestTimerSeconds(interval);
+      setRestTimerMax(interval);
+    });
+
+    const keepAwakeTag = 'workout-player-session';
+    getKeepAwakeSetting().then(enabled => {
+      if (enabled) {
+        activateKeepAwakeAsync(keepAwakeTag).catch((err: unknown) => console.log('Keep awake error:', err));
+      }
+    });
+
+    return () => {
+      deactivateKeepAwake(keepAwakeTag).catch((err: unknown) => console.log('Deactivate keep awake error:', err));
+    };
+  }, []);
 
   async function playSound() {
     try {
@@ -404,13 +426,13 @@ export default function WorkoutPlayer({
 
   const toggleRestTimer = () => {
     if (!restTimerActive) {
-      setRestTimerSeconds(30);
-      setRestTimerMax(30);
+      setRestTimerSeconds(restTimerInterval);
+      setRestTimerMax(restTimerInterval);
       setRestTimerActive(true);
-      scheduleNotification(30);
+      scheduleNotification(restTimerInterval);
     } else {
       setRestTimerSeconds(prev => {
-        const next = prev + 30;
+        const next = prev + restTimerInterval;
         setRestTimerMax(next);
         scheduleNotification(next);
         return next;
@@ -421,7 +443,7 @@ export default function WorkoutPlayer({
   const resetRestTimer = () => {
     if (restTimerActive) {
       setRestTimerActive(false);
-      setRestTimerSeconds(30);
+      setRestTimerSeconds(restTimerInterval);
       cancelNotification();
     }
   };

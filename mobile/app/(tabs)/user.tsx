@@ -69,7 +69,7 @@ export default function UserScreen() {
 
         <TouchableOpacity 
           style={styles.settingsButton} 
-          onPress={() => setIsSettingsModalVisible(true)}
+          onPress={() => router.push('/settings')}
           activeOpacity={0.8}
         >
           <Settings size={24} color="#F8FAFC" />
