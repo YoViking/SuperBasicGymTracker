@@ -1,6 +1,7 @@
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useEffect } from 'react';
 import { supabase } from '../lib/supabase';
 import { useFocusEffect } from 'expo-router';
+import { cacheService } from '../services/cacheService';
 
 export interface BarChartData {
   value: number; // Volume
@@ -50,11 +51,28 @@ export function useYearlyStats() {
     loading: true,
   });
 
-  const fetchStats = async () => {
+  const fetchStats = async (force = false) => {
     try {
-      setStats((prev) => ({ ...prev, loading: true }));
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) return;
+
+      const userId = user.id;
+
+      if (!force) {
+        const memCached = cacheService.get<Omit<YearlyStats, 'loading'>>('yearly_stats', userId);
+        if (memCached) {
+          setStats({ ...memCached, loading: false });
+          return;
+        }
+
+        const asyncCached = await cacheService.getAsync<Omit<YearlyStats, 'loading'>>('yearly_stats', userId);
+        if (asyncCached) {
+          setStats({ ...asyncCached, loading: false });
+          return;
+        }
+      }
+
+      setStats(prev => (prev.barChartData.length > 0 ? prev : { ...prev, loading: true }));
 
       const now = new Date();
       const currentYear = now.getFullYear();
@@ -154,13 +172,19 @@ export function useYearlyStats() {
           .sort((a, b) => b.value - a.value);
       }
 
-      setStats({
+      const result: Omit<YearlyStats, 'loading'> = {
         year: currentYear.toString(),
         barChartData,
         totalTimeSeconds: totalDuration,
         totalWorkouts,
         totalVolume,
         pieChartData,
+      };
+
+      await cacheService.set('yearly_stats', userId, result);
+
+      setStats({
+        ...result,
         loading: false,
       });
 
@@ -170,9 +194,18 @@ export function useYearlyStats() {
     }
   };
 
+  useEffect(() => {
+    const unsub = cacheService.subscribe((category) => {
+      if (category === 'yearly_stats' || category === 'workouts' || category === 'all') {
+        fetchStats(true);
+      }
+    });
+    return unsub;
+  }, []);
+
   useFocusEffect(
     useCallback(() => {
-      fetchStats();
+      fetchStats(false);
     }, [])
   );
 

@@ -1,7 +1,8 @@
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useEffect } from 'react';
 import { supabase } from '../lib/supabase';
 import { useFocusEffect } from 'expo-router';
 import { Workout, Folder, ExerciseLibrary } from '../types';
+import { cacheService } from '../services/cacheService';
 
 export interface PersonalBestAchievement {
   exerciseName: string;
@@ -61,10 +62,29 @@ export function useHomeData() {
     loading: true,
   });
 
-  const fetchHomeData = async () => {
+  const fetchHomeData = async (force = false) => {
     try {
-      setData((prev) => ({ ...prev, loading: true }));
       const { data: { user } } = await supabase.auth.getUser();
+      const userId = user?.id || 'anon';
+
+      if (!force) {
+        // Fast in-memory cache check
+        const memCached = cacheService.get<Omit<HomeData, 'loading'>>('home', userId);
+        if (memCached) {
+          setData({ ...memCached, loading: false });
+          return;
+        }
+
+        // Async storage check
+        const asyncCached = await cacheService.getAsync<Omit<HomeData, 'loading'>>('home', userId);
+        if (asyncCached) {
+          setData({ ...asyncCached, loading: false });
+          return;
+        }
+      }
+
+      // If no cached data exists, indicate loading
+      setData(prev => (prev.latestWorkouts.length > 0 || prev.personalBests.length > 0 ? prev : { ...prev, loading: true }));
 
       // 2. Fetch Latest Active Workouts with exercise info based on recently logged workouts
       let latestWorkouts: Workout[] = [];
@@ -286,11 +306,19 @@ export function useHomeData() {
         }
       }
 
-      setData({
+      const result: Omit<HomeData, 'loading'> = {
         personalBests: personalBests.slice(0, 5),
         latestWorkouts,
         latestFolder,
         dailyExercise,
+      };
+
+      if (user?.id) {
+        await cacheService.set('home', user.id, result);
+      }
+
+      setData({
+        ...result,
         loading: false,
       });
     } catch (e) {
@@ -299,11 +327,20 @@ export function useHomeData() {
     }
   };
 
+  useEffect(() => {
+    const unsub = cacheService.subscribe((category) => {
+      if (category === 'home' || category === 'workouts' || category === 'all') {
+        fetchHomeData(true);
+      }
+    });
+    return unsub;
+  }, []);
+
   useFocusEffect(
     useCallback(() => {
-      fetchHomeData();
+      fetchHomeData(false);
     }, [])
   );
 
-  return { ...data, refetch: fetchHomeData };
+  return { ...data, refetch: () => fetchHomeData(true) };
 }

@@ -12,6 +12,7 @@ import WorkoutPlayer from '../../src/components/WorkoutPlayer';
 import { calculateSetVolume, getUserBodyWeight } from '../../src/utils/volume';
 import WorkoutSummaryModal, { WorkoutSummaryData } from '../../src/components/WorkoutSummaryModal';
 import { detectWorkoutRecords } from '../../src/services/recordDetector';
+import { cacheService } from '../../src/services/cacheService';
 
 const { width } = Dimensions.get('window');
 
@@ -388,6 +389,9 @@ export default function WorkoutDetailScreen() {
         completedExercisesCount: exerciseLogs.length,
         achievements,
       });
+
+      // Invalidate all cached data so Home, User, Stats & Workouts refresh instantly
+      cacheService.invalidate('all');
 
       setIsSaving(false);
       setSummaryModalVisible(true);

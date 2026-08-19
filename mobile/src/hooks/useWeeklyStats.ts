@@ -1,7 +1,8 @@
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useEffect } from 'react';
 import { supabase } from '../lib/supabase';
 import { useFocusEffect } from 'expo-router';
 import { WorkoutLog } from '../types';
+import { cacheService } from '../services/cacheService';
 
 export interface WeeklyStats {
   activeWorkoutsCount: number;
@@ -39,11 +40,28 @@ export function useWeeklyStats() {
     loading: true,
   });
 
-  const fetchStats = async () => {
+  const fetchStats = async (force = false) => {
     try {
-      setStats((prev) => ({ ...prev, loading: true }));
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) return;
+
+      const userId = user.id;
+
+      if (!force) {
+        const memCached = cacheService.get<Omit<WeeklyStats, 'loading'>>('weekly_stats', userId);
+        if (memCached) {
+          setStats({ ...memCached, loading: false });
+          return;
+        }
+
+        const asyncCached = await cacheService.getAsync<Omit<WeeklyStats, 'loading'>>('weekly_stats', userId);
+        if (asyncCached) {
+          setStats({ ...asyncCached, loading: false });
+          return;
+        }
+      }
+
+      setStats(prev => (prev.volumeTrend.length > 0 ? prev : { ...prev, loading: true }));
 
       // 1. Fetch active workouts in the currently used program/folder
       let activeWorkoutsCount = 0;
@@ -176,7 +194,7 @@ export function useWeeklyStats() {
         };
       });
 
-      setStats({
+      const result: Omit<WeeklyStats, 'loading'> = {
         activeWorkoutsCount,
         completedThisWeekCount,
         completedPreviousWeekCount,
@@ -186,6 +204,12 @@ export function useWeeklyStats() {
         previousWeekVolume,
         previousWeekTime,
         volumeTrend: trend,
+      };
+
+      await cacheService.set('weekly_stats', userId, result);
+
+      setStats({
+        ...result,
         loading: false,
       });
 
@@ -195,9 +219,18 @@ export function useWeeklyStats() {
     }
   };
 
+  useEffect(() => {
+    const unsub = cacheService.subscribe((category) => {
+      if (category === 'weekly_stats' || category === 'workouts' || category === 'all') {
+        fetchStats(true);
+      }
+    });
+    return unsub;
+  }, []);
+
   useFocusEffect(
     useCallback(() => {
-      fetchStats();
+      fetchStats(false);
     }, [])
   );
 

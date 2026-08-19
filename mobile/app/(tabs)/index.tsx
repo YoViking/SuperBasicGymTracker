@@ -6,6 +6,7 @@ import {
   ScrollView,
   TouchableOpacity,
   ActivityIndicator,
+  RefreshControl,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Image } from 'expo-image';
@@ -15,11 +16,21 @@ import { useWeeklyStats } from '../../src/hooks/useWeeklyStats';
 import { useHomeData } from '../../src/hooks/useHomeData';
 import { getMuscleGroupImage } from '../../src/utils/images';
 import { Workout } from '../../src/types';
+import { cacheService } from '../../src/services/cacheService';
 
 export default function HomeScreen() {
   const router = useRouter();
   const weeklyStats = useWeeklyStats();
   const homeData = useHomeData();
+  const [refreshing, setRefreshing] = React.useState(false);
+
+  const handleRefresh = async () => {
+    setRefreshing(true);
+    cacheService.invalidate('home');
+    cacheService.invalidate('weekly_stats');
+    await homeData.refetch();
+    setRefreshing(false);
+  };
 
   const loading = weeklyStats.loading || homeData.loading;
 
@@ -111,6 +122,14 @@ export default function HomeScreen() {
         style={styles.container}
         contentContainerStyle={styles.contentContainer}
         showsVerticalScrollIndicator={false}
+        refreshControl={
+          <RefreshControl
+            refreshing={refreshing}
+            onRefresh={handleRefresh}
+            tintColor="#A3E635"
+            colors={['#A3E635']}
+          />
+        }
       >
         {/* Header */}
         <View style={styles.header}>

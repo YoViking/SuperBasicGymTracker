@@ -1,10 +1,11 @@
 import React, { useEffect, useState } from 'react';
-import { View, Text, StyleSheet, TextInput, TouchableOpacity, SectionList, ActivityIndicator, Modal, Pressable, ScrollView } from 'react-native';
+import { View, Text, StyleSheet, TextInput, TouchableOpacity, SectionList, ActivityIndicator, Modal, Pressable, ScrollView, Platform, ToastAndroid } from 'react-native';
 import { Image } from 'expo-image';
 import { supabase } from '../lib/supabase';
 import { Search, MoreVertical, Plus, Dumbbell, Bookmark, EyeOff, X } from 'lucide-react-native';
 import { ExerciseLibrary as Exercise } from '../types';
 import { useRouter } from 'expo-router';
+import { useBookmarks } from '../hooks/useBookmarks';
 
 const MUSCLE_GROUPS = ['All', 'Chest', 'Back', 'Legs', 'Arms', 'Shoulders', 'Core', 'Glutes', 'Other', 'Bookmarked'];
 
@@ -94,6 +95,7 @@ export default function ExerciseLibrary({
   const [activeEquipmentFilter, setActiveEquipmentFilter] = useState('All');
   const [selectedExercise, setSelectedExercise] = useState<Exercise | null>(null);
   const router = useRouter();
+  const { isBookmarked, toggleBookmark } = useBookmarks();
 
   useEffect(() => {
     fetchExercises();
@@ -168,15 +170,15 @@ export default function ExerciseLibrary({
       filtered = filtered.filter(e => e.name.toLowerCase().includes(q));
     }
 
-    if (activeMuscleFilter !== 'All' && activeMuscleFilter !== 'Alla' && activeMuscleFilter !== 'Bookmarked') {
+    if (activeMuscleFilter === 'Bookmarked') {
+      filtered = filtered.filter(e => isBookmarked(e.id));
+    } else if (activeMuscleFilter !== 'All' && activeMuscleFilter !== 'Alla') {
       filtered = filtered.filter(e => e.muscle_group === activeMuscleFilter);
     }
 
     if (activeEquipmentFilter !== 'All' && activeEquipmentFilter !== 'Alla') {
       filtered = filtered.filter(e => matchesEquipmentFilter(e, activeEquipmentFilter));
     }
-
-    // TODO: Handle Bookmarked logic when user bookmarks are implemented
 
     // Group by muscle_group for the SectionList
     const grouped = filtered.reduce((acc, curr) => {
@@ -228,7 +230,12 @@ export default function ExerciseLibrary({
         </View>
       )}
       <View style={styles.exerciseTextContainer}>
-        <Text style={styles.exerciseTitle} numberOfLines={1}>{item.name}</Text>
+        <View style={styles.exerciseTitleRow}>
+          <Text style={styles.exerciseTitle} numberOfLines={1}>{item.name}</Text>
+          {isBookmarked(item.id) && (
+            <Bookmark size={13} color="#A3E635" fill="#A3E635" style={{ marginLeft: 6 }} />
+          )}
+        </View>
         <View style={styles.exerciseMetaRow}>
           {item.equipment ? (
             <View style={styles.equipmentBadge}>
@@ -343,9 +350,20 @@ export default function ExerciseLibrary({
           stickySectionHeadersEnabled={false}
           ListEmptyComponent={
             <View style={styles.emptyContainer}>
-              <Dumbbell size={40} color="#475569" style={{ marginBottom: 12 }} />
-              <Text style={styles.emptyTitle}>Inga övningar hittades</Text>
-              <Text style={styles.emptySubtitle}>Prova att justera sökning eller filter</Text>
+              <Bookmark 
+                size={40} 
+                color={activeMuscleFilter === 'Bookmarked' ? "#A3E635" : "#475569"} 
+                fill={activeMuscleFilter === 'Bookmarked' ? "rgba(163, 230, 53, 0.2)" : "transparent"}
+                style={{ marginBottom: 12 }} 
+              />
+              <Text style={styles.emptyTitle}>
+                {activeMuscleFilter === 'Bookmarked' ? 'Inga bokmärkta övningar än' : 'Inga övningar hittades'}
+              </Text>
+              <Text style={styles.emptySubtitle}>
+                {activeMuscleFilter === 'Bookmarked'
+                  ? 'Tryck på (⋮) vid en övning och välj "Bokmärk" för att spara dina favoriter här!'
+                  : 'Prova att justera sökning eller filter'}
+              </Text>
               {(activeMuscleFilter !== 'All' || activeEquipmentFilter !== 'All' || searchQuery !== '') && (
                 <TouchableOpacity
                   style={styles.resetFiltersButton}
@@ -391,9 +409,30 @@ export default function ExerciseLibrary({
               <Text style={styles.modalText}>Gå till övning</Text>
             </TouchableOpacity>
 
-            <TouchableOpacity style={styles.modalItem}>
-              <Bookmark size={24} color="#F8FAFC" style={styles.modalIcon} />
-              <Text style={styles.modalText}>Bokmärk</Text>
+            <TouchableOpacity 
+              style={styles.modalItem}
+              onPress={async () => {
+                if (selectedExercise) {
+                  const nowBookmarked = await toggleBookmark(selectedExercise.id);
+                  if (Platform.OS === 'android') {
+                    ToastAndroid.show(
+                      nowBookmarked ? 'Bokmärke sparat ⭐' : 'Bokmärke borttaget',
+                      ToastAndroid.SHORT
+                    );
+                  }
+                  closeMenu();
+                }
+              }}
+            >
+              <Bookmark 
+                size={24} 
+                color={selectedExercise && isBookmarked(selectedExercise.id) ? "#A3E635" : "#F8FAFC"} 
+                fill={selectedExercise && isBookmarked(selectedExercise.id) ? "#A3E635" : "transparent"} 
+                style={styles.modalIcon} 
+              />
+              <Text style={[styles.modalText, selectedExercise && isBookmarked(selectedExercise.id) && styles.modalTextHighlight]}>
+                {selectedExercise && isBookmarked(selectedExercise.id) ? 'Ta bort bokmärke' : 'Bokmärk'}
+              </Text>
             </TouchableOpacity>
 
             <TouchableOpacity style={styles.modalItem}>
@@ -516,11 +555,17 @@ const styles = StyleSheet.create({
     flex: 1,
     justifyContent: 'center',
   },
+  exerciseTitleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 4,
+    paddingRight: 8,
+  },
   exerciseTitle: {
-    fontSize: 18,
+    fontSize: 16,
     fontWeight: '700',
     color: '#fff',
-    marginBottom: 4,
+    flexShrink: 1,
   },
   exerciseMetaRow: {
     flexDirection: 'row',

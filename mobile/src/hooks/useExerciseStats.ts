@@ -1,6 +1,7 @@
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useEffect } from 'react';
 import { supabase } from '../lib/supabase';
 import { useFocusEffect } from 'expo-router';
+import { cacheService } from '../services/cacheService';
 
 export interface ExerciseChartData {
   value: number; // Max Estimated 1RM for the week/date
@@ -30,13 +31,31 @@ export function useExerciseStats(exerciseName: string) {
     loading: true,
   });
 
-  const fetchStats = async () => {
+  const fetchStats = async (force = false) => {
     if (!exerciseName) return;
 
     try {
-      setStats((prev) => ({ ...prev, loading: true }));
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) return;
+
+      const userId = user.id;
+      const cacheKey = `exercise_stats_${exerciseName}`;
+
+      if (!force) {
+        const memCached = cacheService.get<Omit<ExerciseStats, 'loading'>>(cacheKey, userId);
+        if (memCached) {
+          setStats({ ...memCached, loading: false });
+          return;
+        }
+
+        const asyncCached = await cacheService.getAsync<Omit<ExerciseStats, 'loading'>>(cacheKey, userId);
+        if (asyncCached) {
+          setStats({ ...asyncCached, loading: false });
+          return;
+        }
+      }
+
+      setStats(prev => (prev.chartData.length > 0 ? prev : { ...prev, loading: true }));
 
       // Fetch all exercise logs for this exercise, joining with workout_logs to get the date
       const { data: logsData, error: logsErr } = await supabase
@@ -84,13 +103,15 @@ export function useExerciseStats(exerciseName: string) {
         dataPointText: Number(max1rm.toFixed(1)).toString()
       }));
 
-      // Sort by the original chronological order
-      // (Since we iterated chronologically and used a Map, it generally preserves insertion order,
-      // but let's make sure it's correct. Map keys follow insertion order).
-
-      setStats({
+      const result: Omit<ExerciseStats, 'loading'> = {
         currentPB: maxWeight,
         chartData,
+      };
+
+      await cacheService.set(cacheKey, userId, result);
+
+      setStats({
+        ...result,
         loading: false,
       });
 
@@ -100,9 +121,18 @@ export function useExerciseStats(exerciseName: string) {
     }
   };
 
+  useEffect(() => {
+    const unsub = cacheService.subscribe((category) => {
+      if (category === 'exercise_stats' || category === 'workouts' || category === 'all') {
+        fetchStats(true);
+      }
+    });
+    return unsub;
+  }, [exerciseName]);
+
   useFocusEffect(
     useCallback(() => {
-      fetchStats();
+      fetchStats(false);
     }, [exerciseName])
   );
 

@@ -1,6 +1,7 @@
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useEffect } from 'react';
 import { supabase } from '../lib/supabase';
 import { useFocusEffect } from 'expo-router';
+import { cacheService } from '../services/cacheService';
 
 export interface HeatmapDay {
   date: string;
@@ -48,11 +49,28 @@ export function useMonthlyStats() {
     loading: true,
   });
 
-  const fetchStats = async () => {
+  const fetchStats = async (force = false) => {
     try {
-      setStats((prev) => ({ ...prev, loading: true }));
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) return;
+
+      const userId = user.id;
+
+      if (!force) {
+        const memCached = cacheService.get<Omit<MonthlyStats, 'loading'>>('monthly_stats', userId);
+        if (memCached) {
+          setStats({ ...memCached, loading: false });
+          return;
+        }
+
+        const asyncCached = await cacheService.getAsync<Omit<MonthlyStats, 'loading'>>('monthly_stats', userId);
+        if (asyncCached) {
+          setStats({ ...asyncCached, loading: false });
+          return;
+        }
+      }
+
+      setStats(prev => (prev.heatmapData.length > 0 ? prev : { ...prev, loading: true }));
 
       const now = new Date();
       // Start of current month
@@ -137,12 +155,18 @@ export function useMonthlyStats() {
           .sort((a, b) => b.value - a.value);
       }
 
-      setStats({
+      const result: Omit<MonthlyStats, 'loading'> = {
         monthName: getMonthName(now),
         heatmapData,
         averageTimeSeconds: avgTime,
         averageVolume: avgVol,
         pieChartData,
+      };
+
+      await cacheService.set('monthly_stats', userId, result);
+
+      setStats({
+        ...result,
         loading: false,
       });
 
@@ -152,9 +176,18 @@ export function useMonthlyStats() {
     }
   };
 
+  useEffect(() => {
+    const unsub = cacheService.subscribe((category) => {
+      if (category === 'monthly_stats' || category === 'workouts' || category === 'all') {
+        fetchStats(true);
+      }
+    });
+    return unsub;
+  }, []);
+
   useFocusEffect(
     useCallback(() => {
-      fetchStats();
+      fetchStats(false);
     }, [])
   );
 

@@ -1,11 +1,12 @@
 import React, { useEffect, useState } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, TextInput, ActivityIndicator, Linking, ScrollView } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, TextInput, ActivityIndicator, Linking, ScrollView, Platform, ToastAndroid } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useLocalSearchParams, useRouter } from 'expo-router';
-import { ArrowLeft, Plus, Minus } from 'lucide-react-native';
+import { ArrowLeft, Plus, Minus, Bookmark } from 'lucide-react-native';
 import { Image } from 'expo-image';
 import { supabase } from '../../src/lib/supabase';
 import { ExerciseLibrary } from '../../src/types';
+import { useBookmarks } from '../../src/hooks/useBookmarks';
 
 interface ExerciseSet {
   id: string;
@@ -21,10 +22,24 @@ export default function ExerciseDetail() {
   
   const [setsData, setSetsData] = useState<ExerciseSet[]>([{ id: Date.now().toString(), reps: '', weight: '' }]);
   const [notes, setNotes] = useState('');
+  const { isBookmarked, toggleBookmark } = useBookmarks();
 
   useEffect(() => {
     fetchExerciseDetails();
   }, [id]);
+
+  const bookmarked = id ? isBookmarked(id) : false;
+
+  const handleToggleBookmark = async () => {
+    if (!id) return;
+    const nowBookmarked = await toggleBookmark(id);
+    if (Platform.OS === 'android') {
+      ToastAndroid.show(
+        nowBookmarked ? 'Bokmärke sparat ⭐' : 'Bokmärke borttaget',
+        ToastAndroid.SHORT
+      );
+    }
+  };
 
   const fetchExerciseDetails = async () => {
     try {
@@ -83,10 +98,23 @@ export default function ExerciseDetail() {
   return (
     <SafeAreaView style={styles.safeArea}>
       <View style={styles.header}>
-        <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
-          <ArrowLeft size={24} color="#F8FAFC" />
+        <View style={styles.headerLeft}>
+          <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
+            <ArrowLeft size={24} color="#F8FAFC" />
+          </TouchableOpacity>
+          <Text style={styles.headerTitle}>Övningsdetaljer</Text>
+        </View>
+        <TouchableOpacity 
+          onPress={handleToggleBookmark} 
+          style={styles.bookmarkButton}
+          hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+        >
+          <Bookmark 
+            size={24} 
+            color={bookmarked ? "#A3E635" : "#94A3B8"} 
+            fill={bookmarked ? "#A3E635" : "transparent"} 
+          />
         </TouchableOpacity>
-        <Text style={styles.headerTitle}>Exercise Detail</Text>
       </View>
 
       <ScrollView style={styles.container} keyboardShouldPersistTaps="handled">
@@ -218,13 +246,21 @@ const styles = StyleSheet.create({
   header: {
     flexDirection: 'row',
     alignItems: 'center',
+    justifyContent: 'space-between',
     paddingHorizontal: 16,
     paddingTop: 12,
     paddingBottom: 20,
   },
+  headerLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
   backButton: {
     padding: 8,
-    marginRight: 16,
+    marginRight: 12,
+  },
+  bookmarkButton: {
+    padding: 8,
   },
   headerTitle: {
     fontSize: 20,

@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { View, Text, StyleSheet, ActivityIndicator, TouchableOpacity, ScrollView, Platform, ToastAndroid, Modal, Pressable } from 'react-native';
+import { View, Text, StyleSheet, ActivityIndicator, TouchableOpacity, ScrollView, Platform, ToastAndroid, Modal, Pressable, RefreshControl } from 'react-native';
 import { supabase } from '../lib/supabase';
 import { MoreVertical, Folder as FolderIcon, Plus, Sparkles, Dumbbell } from 'lucide-react-native';
 import { Workout, Folder } from '../types';
@@ -11,12 +11,14 @@ import AiProgramWizard from './AiProgramWizard';
 import { Image } from 'expo-image';
 import { getMuscleGroupImage } from '../utils/images';
 import { decode } from 'base64-arraybuffer';
+import { cacheService } from '../services/cacheService';
 
 export default function SavedWorkouts() {
   const router = useRouter();
   const [workouts, setWorkouts] = useState<Workout[]>([]);
   const [folders, setFolders] = useState<Folder[]>([]);
   const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
   
   const [menuVisible, setMenuVisible] = useState(false);
   const [moveModalVisible, setMoveModalVisible] = useState(false);
@@ -25,27 +27,49 @@ export default function SavedWorkouts() {
   
   const [selectedWorkout, setSelectedWorkout] = useState<Workout | null>(null);
 
-  useFocusEffect(
-    React.useCallback(() => {
-      fetchWorkoutsAndFolders();
-    }, [])
-  );
-
-  const fetchWorkoutsAndFolders = async () => {
+  const fetchWorkoutsAndFolders = async (force = false) => {
     try {
-      setLoading(true);
       const { data: { user } } = await supabase.auth.getUser();
+      const userId = user?.id || 'anon';
+
+      if (!force) {
+        // Fast in-memory cache check
+        const memCached = cacheService.get<{ workouts: Workout[]; folders: Folder[] }>('workouts', userId);
+        if (memCached) {
+          setWorkouts(memCached.workouts);
+          setFolders(memCached.folders);
+          setLoading(false);
+          return;
+        }
+
+        // Async storage check
+        const asyncCached = await cacheService.getAsync<{ workouts: Workout[]; folders: Folder[] }>('workouts', userId);
+        if (asyncCached) {
+          setWorkouts(asyncCached.workouts);
+          setFolders(asyncCached.folders);
+          setLoading(false);
+          return;
+        }
+      }
+
+      if (force) {
+        setRefreshing(true);
+      } else {
+        setLoading(prev => (workouts.length > 0 || folders.length > 0 ? false : true));
+      }
       
+      let foldersData: Folder[] = [];
       // Fetch folders if user exists
       if (user) {
-        const { data: foldersData, error: foldersError } = await supabase
+        const { data: fData, error: foldersError } = await supabase
           .from('folders')
           .select('*')
           .eq('user_id', user.id)
           .order('created_at', { ascending: false });
           
-        if (!foldersError && foldersData) {
-          setFolders(foldersData);
+        if (!foldersError && fData) {
+          foldersData = fData;
+          setFolders(fData);
         }
       }
 
@@ -71,13 +95,35 @@ export default function SavedWorkouts() {
         return;
       }
 
-      setWorkouts(workoutsData || []);
+      const finalWorkouts = workoutsData || [];
+      setWorkouts(finalWorkouts);
+
+      if (user?.id) {
+        await cacheService.set('workouts', user.id, { workouts: finalWorkouts, folders: foldersData });
+      }
     } catch (error) {
-      console.error('Error:', error);
+      console.error('Error in fetchWorkoutsAndFolders:', error);
     } finally {
       setLoading(false);
+      setRefreshing(false);
     }
   };
+
+  useEffect(() => {
+    fetchWorkoutsAndFolders(false);
+    const unsub = cacheService.subscribe((category) => {
+      if (category === 'workouts' || category === 'all') {
+        fetchWorkoutsAndFolders(true);
+      }
+    });
+    return unsub;
+  }, []);
+
+  useFocusEffect(
+    React.useCallback(() => {
+      fetchWorkoutsAndFolders(false);
+    }, [])
+  );
 
   const handleOpenMenu = (workout: Workout) => {
     setSelectedWorkout(workout);
@@ -99,6 +145,8 @@ export default function SavedWorkouts() {
       
       if (error) throw error;
       setWorkouts(prev => prev.filter(w => w.id !== selectedWorkout.id));
+      cacheService.invalidate('workouts');
+      cacheService.invalidate('home');
       if (Platform.OS === 'android') ToastAndroid.show('Workout raderad', ToastAndroid.SHORT);
       handleCloseMenu();
     } catch (e: any) {
@@ -125,6 +173,8 @@ export default function SavedWorkouts() {
       if (error) throw error;
       
       setWorkouts(prev => prev.map(w => w.id === selectedWorkout.id ? { ...w, folder_id: folderId } : w));
+      cacheService.invalidate('workouts');
+      cacheService.invalidate('home');
       setMoveModalVisible(false);
       setSelectedWorkout(null);
       if (Platform.OS === 'android') ToastAndroid.show('Flyttad till program', ToastAndroid.SHORT);
@@ -168,6 +218,8 @@ export default function SavedWorkouts() {
       if (error) throw error;
       
       setFolders(prev => [data, ...prev]);
+      cacheService.invalidate('workouts');
+      cacheService.invalidate('home');
       setCreateOptionsVisible(false);
       
       // If we had a selected workout, automatically move it to the new program
@@ -198,6 +250,8 @@ export default function SavedWorkouts() {
       if (error) throw error;
 
       setCreateOptionsVisible(false);
+      cacheService.invalidate('workouts');
+      cacheService.invalidate('home');
       if (Platform.OS === 'android') ToastAndroid.show('Workout skapad', ToastAndroid.SHORT);
 
       // Update local state
@@ -282,7 +336,18 @@ export default function SavedWorkouts() {
   const standaloneWorkouts = workouts.filter(w => !w.folder_id);
 
   return (
-    <ScrollView style={styles.content} contentContainerStyle={styles.scrollContent}>
+    <ScrollView 
+      style={styles.content} 
+      contentContainerStyle={styles.scrollContent}
+      refreshControl={
+        <RefreshControl 
+          refreshing={refreshing} 
+          onRefresh={() => fetchWorkoutsAndFolders(true)} 
+          tintColor="#A3E635" 
+          colors={['#A3E635']} 
+        />
+      }
+    >
       
       <Text style={styles.headerTitle}>Träning</Text>
 
