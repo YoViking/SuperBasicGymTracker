@@ -47,7 +47,7 @@ function RootLayoutNav() {
   useEffect(() => {
     if (loading) return;
 
-    const inAuthGroup = segments[0] === 'auth' || segments[0] === 'reset-password';
+    const inAuthGroup = segments[0] === 'auth' || segments[0] === 'reset-password' || segments[0] === 'terms';
 
     if (!session && !inAuthGroup) {
       router.replace('/auth');
@@ -60,6 +60,7 @@ function RootLayoutNav() {
     <Stack screenOptions={{ headerShown: false }}>
       <Stack.Screen name="auth" options={{ headerShown: false }} />
       <Stack.Screen name="reset-password" options={{ headerShown: false }} />
+      <Stack.Screen name="terms" options={{ headerShown: false }} />
       <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
       <Stack.Screen name="settings" options={{ headerShown: false }} />
       <Stack.Screen name="exercise/[id]" options={{ headerShown: false }} />

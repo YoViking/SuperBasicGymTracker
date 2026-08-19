@@ -147,6 +147,49 @@ export default function SettingsScreen() {
             </TouchableOpacity>
           </View>
         ) : null}
+
+          {/* Om & Juridiskt Section */}
+        <View style={[styles.section, { marginTop: 32 }]}>
+          <Text style={styles.sectionTitle}>Om & Juridiskt</Text>
+
+          <TouchableOpacity
+            style={styles.settingCard}
+            onPress={() => router.push('/terms')}
+            activeOpacity={0.7}
+          >
+            <View style={styles.settingTextContainer}>
+              <Text style={styles.settingTitle}>Användarvillkor & Integritet</Text>
+              <Text style={styles.settingSubtitle}>
+                Regler, friskrivningar och GDPR
+              </Text>
+            </View>
+            <ChevronRight size={20} color="#94A3B8" />
+          </TouchableOpacity>
+
+          <View style={[styles.settingCard, { marginTop: 12 }]}>
+            <View style={styles.settingTextContainer}>
+              <Text style={styles.settingTitle}>Upphovsrätt & Copyright</Text>
+              <Text style={styles.settingSubtitle}>
+                © 2026 Workout Player / Joakim Viking. Alla rättigheter förbehållna.
+              </Text>
+            </View>
+          </View>
+
+          <View style={[styles.settingCard, { marginTop: 12 }]}>
+            <View style={styles.settingTextContainer}>
+              <Text style={styles.settingTitle}>Lokal data & Utveckling</Text>
+              <Text style={styles.settingSubtitle}>
+                Appen använder säker lokal enhetslagring för offline-stöd och prestanda.
+              </Text>
+            </View>
+          </View>
+        </View>
+
+        {/* App Version Footer */}
+        <View style={styles.settingsFooter}>
+          <Text style={styles.settingsFooterText}>Workout Player v1.0.0</Text>
+          <Text style={styles.settingsFooterSubText}>Skapad med ❤️ av Joakim Viking</Text>
+        </View>
       </ScrollView>
 
       {/* Rest Timer Interval Modal */}
@@ -335,5 +378,19 @@ const styles = StyleSheet.create({
   modalOptionTextSelected: {
     fontWeight: '700',
     color: '#000000',
+  },
+  settingsFooter: {
+    alignItems: 'center',
+    paddingVertical: 28,
+    gap: 4,
+  },
+  settingsFooterText: {
+    color: '#64748B',
+    fontSize: 13,
+    fontWeight: '600',
+  },
+  settingsFooterSubText: {
+    color: '#475569',
+    fontSize: 12,
   },
 });

@@ -65,7 +65,6 @@ export default function ExerciseStats({ exerciseName }: ExerciseStatsProps) {
             dataPointsColor="#A3E635"
             dataPointsRadius={4}
             hideDataPoints={false}
-            showTextOnDataPoints
             isAnimated
             areaChart
             startFillColor="#A3E635"

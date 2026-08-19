@@ -17,6 +17,7 @@ import { useRouter } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import Svg, { Path } from 'react-native-svg';
 import { ArrowLeft, CheckCircle2, KeyRound, Mail, Lock, ShieldCheck } from 'lucide-react-native';
+import TermsModal from '../src/components/TermsModal';
 import {
   signInWithGoogle,
   handleAuthUrl,
@@ -55,6 +56,7 @@ export default function AuthScreen() {
   const [mode, setMode] = useState<AuthMode>('LOGIN');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [termsModalVisible, setTermsModalVisible] = useState(false);
   
   // Password reset states
   const [resetEmail, setResetEmail] = useState('');
@@ -388,6 +390,27 @@ export default function AuthScreen() {
                   <Text style={styles.secondaryButtonText}>Skapa Konto</Text>
                 </TouchableOpacity>
               </View>
+
+              {/* Terms and Privacy notice */}
+              <View style={styles.termsContainer}>
+                <Text style={styles.termsText}>
+                  Genom att fortsätta godkänner du våra{' '}
+                  <Text
+                    style={styles.termsLink}
+                    onPress={() => setTermsModalVisible(true)}
+                  >
+                    Användarvillkor & Integritetspolicy
+                  </Text>
+                  .
+                </Text>
+              </View>
+
+              {/* Copyright Footer */}
+              <View style={styles.authFooter}>
+                <Text style={styles.authCopyrightText}>
+                  Copyright © 2026 Workout Player • Joakim Viking
+                </Text>
+              </View>
             </>
           )}
 
@@ -567,6 +590,12 @@ export default function AuthScreen() {
           )}
         </ScrollView>
       </KeyboardAvoidingView>
+
+      {/* Terms and Privacy Policy Modal */}
+      <TermsModal
+        visible={termsModalVisible}
+        onClose={() => setTermsModalVisible(false)}
+      />
     </SafeAreaView>
   );
 }
@@ -749,5 +778,30 @@ const styles = StyleSheet.create({
     alignSelf: 'center',
     borderWidth: 1,
     borderColor: 'rgba(163, 230, 53, 0.25)',
+  },
+  termsContainer: {
+    marginTop: 20,
+    paddingHorizontal: 8,
+  },
+  termsText: {
+    color: '#64748B',
+    fontSize: 12,
+    lineHeight: 18,
+    textAlign: 'center',
+  },
+  termsLink: {
+    color: '#A3E635',
+    fontWeight: '700',
+    textDecorationLine: 'underline',
+  },
+  authFooter: {
+    marginTop: 32,
+    alignItems: 'center',
+    paddingVertical: 12,
+  },
+  authCopyrightText: {
+    color: '#475569',
+    fontSize: 12,
+    fontWeight: '500',
   },
 });
