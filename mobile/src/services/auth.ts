@@ -141,10 +141,10 @@ export async function signInWithGoogle(): Promise<AuthResult> {
     const isExpoGo = Constants.executionEnvironment === ExecutionEnvironment.StoreClient;
 
     // In Expo Go, use exp:// url so Expo Go handles the return link
-    // In standalone build, use superbasicgymtracker://auth
+    // In standalone build, use workoutplayer://auth
     const redirectUrl = isExpoGo
       ? AuthSession.makeRedirectUri({ path: 'auth' })
-      : 'superbasicgymtracker://auth';
+      : 'workoutplayer://auth';
 
     console.log('[Auth] isExpoGo:', isExpoGo);
     console.log('[Auth] Using Redirect URL:', redirectUrl);
@@ -214,7 +214,7 @@ export async function sendPasswordResetEmail(email: string): Promise<AuthResult>
     const isExpoGo = Constants.executionEnvironment === ExecutionEnvironment.StoreClient;
     const redirectUrl = isExpoGo
       ? AuthSession.makeRedirectUri({ path: 'auth' })
-      : 'superbasicgymtracker://auth';
+      : 'workoutplayer://auth';
 
     console.log('[Auth] Sending password reset for:', email, 'redirectUrl:', redirectUrl);
 

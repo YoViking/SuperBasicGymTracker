@@ -296,7 +296,7 @@ export default function AuthScreen() {
           {/* Mode 1: STANDARD LOGIN */}
           {mode === 'LOGIN' && (
             <>
-              <Text style={styles.title}>SuperBasic</Text>
+              <Text style={styles.title}>Workout Player</Text>
               <Text style={styles.subtitle}>Logga in eller skapa ett konto</Text>
 
               {/* Google Sign-In Button */}

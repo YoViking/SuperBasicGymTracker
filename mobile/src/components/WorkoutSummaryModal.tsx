@@ -68,7 +68,7 @@ export default function WorkoutSummaryModal({
         : '';
 
       const message = 
-`💪 Jag körde precis klart ett träningspass med SuperBasic Gym Tracker!
+`💪 Jag körde precis klart ett träningspass med Workout Player!
 
 📋 Pass: ${summary.workoutName}
 ⏱️ Tid: ${formatDuration(summary.durationSeconds)}
@@ -76,7 +76,7 @@ export default function WorkoutSummaryModal({
 🔢 Totala reps: ${summary.totalReps} st
 📊 Antal set: ${summary.completedSetsCount} st${recordsText}
 
-#SuperBasicGymTracker #Träning #Workout`;
+#WorkoutPlayer #Träning #Workout`;
 
       await Share.share({
         message,
