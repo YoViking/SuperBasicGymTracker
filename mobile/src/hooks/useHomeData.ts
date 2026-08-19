@@ -7,6 +7,41 @@ export interface PersonalBestAchievement {
   exerciseName: string;
   currentWeight: number;
   increase: number;
+  type?: 'max_weight' | 'max_reps';
+  reps?: number;
+  unit: string;
+  achievedAt: string;
+  dateDisplay: string;
+}
+
+export function formatRecordDate(dateStr: string): string {
+  try {
+    const d = new Date(dateStr);
+    const now = new Date();
+    
+    // Check if same calendar day
+    const isToday = d.getFullYear() === now.getFullYear() &&
+      d.getMonth() === now.getMonth() &&
+      d.getDate() === now.getDate();
+    if (isToday) return 'Idag';
+
+    // Check if yesterday
+    const yesterday = new Date(now);
+    yesterday.setDate(yesterday.getDate() - 1);
+    const isYesterday = d.getFullYear() === yesterday.getFullYear() &&
+      d.getMonth() === yesterday.getMonth() &&
+      d.getDate() === yesterday.getDate();
+    if (isYesterday) return 'Igår';
+
+    const day = d.getDate();
+    const months = ['jan', 'feb', 'mar', 'apr', 'maj', 'jun', 'jul', 'aug', 'sep', 'okt', 'nov', 'dec'];
+    const month = months[d.getMonth()] || '';
+    const isThisYear = d.getFullYear() === now.getFullYear();
+    
+    return isThisYear ? `${day} ${month}` : `${day} ${month} ${d.getFullYear()}`;
+  } catch {
+    return dateStr;
+  }
 }
 
 export interface HomeData {
@@ -143,13 +178,14 @@ export function useHomeData() {
         }
       }
 
-      // 3. Fetch Personal Best Achievements
+      // 3. Fetch Personal Best Achievements (Chronological progression to detect genuine PR events)
       const personalBests: PersonalBestAchievement[] = [];
       if (user) {
         const { data: logsData, error: logsErr } = await supabase
           .from('workout_exercise_logs')
           .select(`
             weight,
+            reps,
             exercise_name,
             workout_logs!inner(created_at, user_id)
           `)
@@ -158,46 +194,66 @@ export function useHomeData() {
           .order('workout_logs(created_at)', { ascending: true });
 
         if (!logsErr && logsData) {
-          // Group by exercise to track max weight progression
-          const exerciseProgression = new Map<string, { maxBefore: number; currentMax: number }>();
+          // Track highest weight and reps achieved up to each workout session
+          const historyMap = new Map<string, { maxWeight: number; maxRepsAtMax: number }>();
+          const allPBEvents: PersonalBestAchievement[] = [];
 
           logsData.forEach((log: any) => {
             const name = log.exercise_name;
             const weight = Number(log.weight) || 0;
-            if (!name || weight <= 0) return;
+            const reps = Number(log.reps) || 0;
+            const createdAt = log.workout_logs?.created_at;
+            if (!name || weight <= 0 || !createdAt) return;
 
-            const existing = exerciseProgression.get(name);
+            const existing = historyMap.get(name);
             if (!existing) {
-              exerciseProgression.set(name, { maxBefore: weight, currentMax: weight });
+              // Baseline establishment for this exercise
+              historyMap.set(name, { maxWeight: weight, maxRepsAtMax: reps });
             } else {
-              if (weight > existing.currentMax) {
-                exerciseProgression.set(name, {
-                  maxBefore: existing.currentMax,
-                  currentMax: weight,
+              if (weight > existing.maxWeight) {
+                // Strict Max Weight PB!
+                const increase = Number((weight - existing.maxWeight).toFixed(1));
+                allPBEvents.push({
+                  exerciseName: name,
+                  currentWeight: weight,
+                  increase,
+                  type: 'max_weight',
+                  unit: 'kg',
+                  achievedAt: createdAt,
+                  dateDisplay: formatRecordDate(createdAt),
                 });
+                historyMap.set(name, { maxWeight: weight, maxRepsAtMax: reps });
+              } else if (weight === existing.maxWeight && reps > existing.maxRepsAtMax && existing.maxRepsAtMax > 0) {
+                // Reps PB at same max weight!
+                const increase = reps - existing.maxRepsAtMax;
+                allPBEvents.push({
+                  exerciseName: name,
+                  currentWeight: weight,
+                  increase,
+                  reps,
+                  type: 'max_reps',
+                  unit: 'reps',
+                  achievedAt: createdAt,
+                  dateDisplay: formatRecordDate(createdAt),
+                });
+                historyMap.set(name, { maxWeight: weight, maxRepsAtMax: reps });
               }
             }
           });
 
-          exerciseProgression.forEach((val, name) => {
-            const increase = val.currentMax - val.maxBefore;
-            if (increase > 0) {
-              personalBests.push({
-                exerciseName: name,
-                currentWeight: val.currentMax,
-                increase,
-              });
-            }
-          });
-        }
-      }
+          // Sort by most recently achieved PRs first
+          allPBEvents.sort((a, b) => new Date(b.achievedAt).getTime() - new Date(a.achievedAt).getTime());
 
-      // Fallback sample PRs if user doesn't have logged PR increases yet
-      if (personalBests.length === 0) {
-        personalBests.push(
-          { exerciseName: 'Leg Extensions', currentWeight: 70, increase: 4 },
-          { exerciseName: 'Romanian Deadlift', currentWeight: 80, increase: 5 }
-        );
+          // Show the latest distinct PRs
+          const seenExercises = new Set<string>();
+          for (const pr of allPBEvents) {
+            if (!seenExercises.has(pr.exerciseName)) {
+              seenExercises.add(pr.exerciseName);
+              personalBests.push(pr);
+            }
+            if (personalBests.length >= 5) break;
+          }
+        }
       }
 
       // 4. Fetch Daily Randomized Exercise from exercise_library

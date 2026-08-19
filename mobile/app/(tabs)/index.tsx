@@ -180,12 +180,23 @@ export default function HomeScreen() {
                       index < homeData.personalBests.length - 1 && styles.rowDivider,
                     ]}
                   >
-                    <Text style={styles.prName} numberOfLines={1}>
-                      {pr.exerciseName}
-                    </Text>
+                    <View style={styles.prLeft}>
+                      <Text style={styles.prName} numberOfLines={1}>
+                        {pr.exerciseName}
+                      </Text>
+                      <Text style={styles.prDate}>
+                        {pr.dateDisplay}
+                      </Text>
+                    </View>
                     <View style={styles.prRight}>
-                      <Text style={styles.prWeight}>{pr.currentWeight} kg</Text>
-                      <Text style={styles.prDelta}>+ {pr.increase} kg</Text>
+                      <Text style={styles.prWeight}>
+                        {pr.type === 'max_reps'
+                          ? `${pr.reps} reps (${pr.currentWeight} kg)`
+                          : `${pr.currentWeight} kg`}
+                      </Text>
+                      <Text style={styles.prDelta}>
+                        +{pr.increase} {pr.unit}
+                      </Text>
                     </View>
                   </View>
                 ))
@@ -428,34 +439,41 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    paddingVertical: 8,
+    paddingVertical: 10,
   },
   rowDivider: {
     borderBottomWidth: 1,
     borderBottomColor: '#2A303C',
   },
-  prName: {
-    color: '#FFFFFF', // White
-    fontSize: 15,
-    fontWeight: '600',
+  prLeft: {
     flex: 1,
-    marginRight: 8,
+    marginRight: 12,
+  },
+  prName: {
+    color: '#FFFFFF',
+    fontSize: 15,
+    fontWeight: '700',
+    marginBottom: 2,
+  },
+  prDate: {
+    color: '#94A3B8',
+    fontSize: 12,
+    fontWeight: '500',
   },
   prRight: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 16,
+    alignItems: 'flex-end',
+    justifyContent: 'center',
   },
   prWeight: {
     color: '#F8FAFC',
     fontSize: 15,
     fontWeight: 'bold',
+    marginBottom: 2,
   },
   prDelta: {
-    color: '#B9FF3B', // Bright green increase color
-    fontSize: 14,
-    width: 56,
-    textAlign: 'right',
+    color: '#A3E635',
+    fontSize: 13,
+    fontWeight: '700',
   },
   senasteRow: {
     flexDirection: 'row',
