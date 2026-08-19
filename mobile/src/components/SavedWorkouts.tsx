@@ -1,12 +1,12 @@
 import React, { useEffect, useState } from 'react';
 import { View, Text, StyleSheet, ActivityIndicator, TouchableOpacity, ScrollView, Platform, ToastAndroid, Modal, Pressable } from 'react-native';
 import { supabase } from '../lib/supabase';
-import { MoreVertical, Folder as FolderIcon, Plus, Sparkles } from 'lucide-react-native';
+import { MoreVertical, Folder as FolderIcon, Plus, Sparkles, Dumbbell } from 'lucide-react-native';
 import { Workout, Folder } from '../types';
 import { useRouter, useFocusEffect } from 'expo-router';
 import WorkoutMenuModal from './WorkoutMenuModal';
 import MoveToFolderModal from './MoveToFolderModal';
-import CreateFolderModal from './CreateFolderModal';
+import CreateModal from './CreateModal';
 import AiProgramWizard from './AiProgramWizard';
 import { Image } from 'expo-image';
 import { getMuscleGroupImage } from '../utils/images';
@@ -20,7 +20,6 @@ export default function SavedWorkouts() {
   
   const [menuVisible, setMenuVisible] = useState(false);
   const [moveModalVisible, setMoveModalVisible] = useState(false);
-  const [createModalVisible, setCreateModalVisible] = useState(false);
   const [aiWizardVisible, setAiWizardVisible] = useState(false);
   const [createOptionsVisible, setCreateOptionsVisible] = useState(false);
   
@@ -169,7 +168,7 @@ export default function SavedWorkouts() {
       if (error) throw error;
       
       setFolders(prev => [data, ...prev]);
-      setCreateModalVisible(false);
+      setCreateOptionsVisible(false);
       
       // If we had a selected workout, automatically move it to the new program
       if (selectedWorkout) {
@@ -178,6 +177,37 @@ export default function SavedWorkouts() {
     } catch (e: any) {
       console.error(e);
       if (Platform.OS === 'android') ToastAndroid.show('Kunde inte skapa program', ToastAndroid.SHORT);
+    }
+  };
+
+  const handleCreateWorkout = async (name: string, folderId: string | null) => {
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return;
+
+      const { data, error } = await supabase
+        .from('workouts')
+        .insert([{
+          name,
+          folder_id: folderId,
+          user_id: user.id,
+        }])
+        .select()
+        .single();
+
+      if (error) throw error;
+
+      setCreateOptionsVisible(false);
+      if (Platform.OS === 'android') ToastAndroid.show('Workout skapad', ToastAndroid.SHORT);
+
+      // Update local state
+      setWorkouts(prev => [data, ...prev]);
+
+      // Navigate directly to edit/builder to add exercises
+      router.push(`/workout/edit/${data.id}`);
+    } catch (e: any) {
+      console.error('Error creating workout:', e);
+      if (Platform.OS === 'android') ToastAndroid.show('Kunde inte skapa workout', ToastAndroid.SHORT);
     }
   };
 
@@ -290,14 +320,6 @@ export default function SavedWorkouts() {
         )}
       </View>
 
-      <TouchableOpacity 
-        style={styles.arkivButton}
-        activeOpacity={0.7}
-        onPress={() => router.push('/archive')}
-      >
-        <Text style={styles.arkivButtonText}>Arkiv</Text>
-      </TouchableOpacity>
-
       <WorkoutMenuModal
         visible={menuVisible}
         workoutName={selectedWorkout?.name || ''}
@@ -320,68 +342,21 @@ export default function SavedWorkouts() {
         onSelectFolder={handleMoveToFolder}
         onCreateNew={() => {
           setMoveModalVisible(false);
-          setCreateModalVisible(true);
+          setCreateOptionsVisible(true);
         }}
       />
 
-      <CreateFolderModal
-        visible={createModalVisible}
-        onClose={() => {
-          setCreateModalVisible(false);
-          if (!selectedWorkout) {
-            // Only clear selection if we didn't come from a workout menu
-          }
-        }}
-        onCreate={handleCreateFolder}
-      />
-
-      {/* Selection Modal: Manual vs AI */}
-      <Modal
+      <CreateModal
         visible={createOptionsVisible}
-        transparent={true}
-        animationType="fade"
-        onRequestClose={() => setCreateOptionsVisible(false)}
-      >
-        <Pressable style={styles.modalOverlay} onPress={() => setCreateOptionsVisible(false)}>
-          <View style={styles.optionsModalContent}>
-            <Text style={styles.optionsModalTitle}>Skapa nytt program</Text>
-            
-            <TouchableOpacity 
-              style={styles.optionItem}
-              onPress={() => {
-                setCreateOptionsVisible(false);
-                setCreateModalVisible(true);
-              }}
-              activeOpacity={0.8}
-            >
-              <View style={styles.optionIconBg}>
-                <FolderIcon size={22} color="#A3E635" />
-              </View>
-              <View style={styles.optionTextContainer}>
-                <Text style={styles.optionTitle}>Skapa manuellt</Text>
-                <Text style={styles.optionDesc}>Bygg programmet och lägg till pass för hand</Text>
-              </View>
-            </TouchableOpacity>
-
-            <TouchableOpacity 
-              style={[styles.optionItem, styles.optionItemAi]}
-              onPress={() => {
-                setCreateOptionsVisible(false);
-                setAiWizardVisible(true);
-              }}
-              activeOpacity={0.8}
-            >
-              <View style={[styles.optionIconBg, styles.optionIconBgAi]}>
-                <Sparkles size={22} color="#0A0A0A" />
-              </View>
-              <View style={styles.optionTextContainer}>
-                <Text style={[styles.optionTitle, styles.optionTitleAi]}>Skapa med AI ✨</Text>
-                <Text style={styles.optionDesc}>Få ett schema anpassat efter dina mål, skador och utrustning</Text>
-              </View>
-            </TouchableOpacity>
-          </View>
-        </Pressable>
-      </Modal>
+        folders={folders}
+        onClose={() => {
+          setCreateOptionsVisible(false);
+          setSelectedWorkout(null);
+        }}
+        onCreateWorkout={handleCreateWorkout}
+        onCreateFolder={handleCreateFolder}
+        onOpenAiWizard={() => setAiWizardVisible(true)}
+      />
 
       <AiProgramWizard
         visible={aiWizardVisible}
@@ -514,19 +489,6 @@ const styles = StyleSheet.create({
     color: '#94A3B8',
     textAlign: 'center',
     marginVertical: 20,
-  },
-  arkivButton: {
-    backgroundColor: '#3F3F46', // Matched to workout cards
-    borderRadius: 8,
-    paddingVertical: 18,
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginTop: 8,
-  },
-  arkivButtonText: {
-    color: '#F8FAFC',
-    fontSize: 16,
-    fontWeight: '700',
   },
   modalOverlay: {
     flex: 1,

@@ -1,8 +1,6 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { supabase } from '../lib/supabase';
 
-const STORAGE_KEY = '@user_body_weight';
-const STORAGE_HISTORY_KEY = '@user_body_weight_history';
 export const DEFAULT_BODY_WEIGHT = 75;
 
 export interface BodyWeightEntry {
@@ -135,24 +133,31 @@ export function calculateSetVolume(
   return Math.round(reps * (weight || 0));
 }
 
+const getStorageKey = (userId?: string) => (userId ? `@user_body_weight_${userId}` : '@user_body_weight');
+const getStorageHistoryKey = (userId?: string) => (userId ? `@user_body_weight_history_${userId}` : '@user_body_weight_history');
+
 /**
- * Fetches the user's stored body weight from local storage or Supabase metadata.
+ * Fetches the user's stored body weight from Supabase metadata or user-scoped local storage.
  * Returns default (75 kg) if not set.
  */
 export async function getUserBodyWeight(): Promise<number> {
   try {
-    const cached = await AsyncStorage.getItem(STORAGE_KEY);
-    if (cached) {
-      const parsed = parseFloat(cached);
-      if (!isNaN(parsed) && parsed > 0) return parsed;
-    }
-
     const { data: { user } } = await supabase.auth.getUser();
+    const storageKey = getStorageKey(user?.id);
+
     if (user?.user_metadata?.body_weight) {
       const weight = parseFloat(user.user_metadata.body_weight);
       if (!isNaN(weight) && weight > 0) {
-        await AsyncStorage.setItem(STORAGE_KEY, weight.toString());
+        await AsyncStorage.setItem(storageKey, weight.toString());
         return weight;
+      }
+    }
+
+    if (user?.id) {
+      const cached = await AsyncStorage.getItem(storageKey);
+      if (cached) {
+        const parsed = parseFloat(cached);
+        if (!isNaN(parsed) && parsed > 0) return parsed;
       }
     }
   } catch (error) {
@@ -167,9 +172,12 @@ export async function getUserBodyWeight(): Promise<number> {
 export async function saveUserBodyWeight(weight: number): Promise<void> {
   if (isNaN(weight) || weight <= 0) return;
   try {
-    await AsyncStorage.setItem(STORAGE_KEY, weight.toString());
+    const { data: { user } } = await supabase.auth.getUser();
+    const storageKey = getStorageKey(user?.id);
+
+    await AsyncStorage.setItem(storageKey, weight.toString());
     await supabase.auth.updateUser({
-      data: { body_weight: weight }
+      data: { body_weight: weight },
     });
   } catch (error) {
     console.error('Error saving user body weight:', error);
@@ -181,22 +189,26 @@ export async function saveUserBodyWeight(weight: number): Promise<void> {
  */
 export async function getBodyWeightHistory(): Promise<BodyWeightEntry[]> {
   try {
-    const cached = await AsyncStorage.getItem(STORAGE_HISTORY_KEY);
-    if (cached) {
-      const parsed: BodyWeightEntry[] = JSON.parse(cached);
-      if (Array.isArray(parsed) && parsed.length > 0) {
-        return parsed.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
-      }
-    }
-
     const { data: { user } } = await supabase.auth.getUser();
+    const historyKey = getStorageHistoryKey(user?.id);
+
     if (user?.user_metadata?.body_weight_history && Array.isArray(user.user_metadata.body_weight_history)) {
       const history: BodyWeightEntry[] = user.user_metadata.body_weight_history;
-      await AsyncStorage.setItem(STORAGE_HISTORY_KEY, JSON.stringify(history));
+      await AsyncStorage.setItem(historyKey, JSON.stringify(history));
       return history.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
     }
 
-    // Seed with current weight if history is empty
+    if (user?.id) {
+      const cached = await AsyncStorage.getItem(historyKey);
+      if (cached) {
+        const parsed: BodyWeightEntry[] = JSON.parse(cached);
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          return parsed.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+        }
+      }
+    }
+
+    // Seed with current weight if history is empty for this user
     const currentWeight = await getUserBodyWeight();
     const initialEntry: BodyWeightEntry = {
       id: Date.now().toString(),
@@ -204,7 +216,10 @@ export async function getBodyWeightHistory(): Promise<BodyWeightEntry[]> {
       date: new Date().toISOString(),
       created_at: new Date().toISOString(),
     };
-    await AsyncStorage.setItem(STORAGE_HISTORY_KEY, JSON.stringify([initialEntry]));
+
+    if (user?.id) {
+      await AsyncStorage.setItem(historyKey, JSON.stringify([initialEntry]));
+    }
     return [initialEntry];
   } catch (error) {
     console.error('Error getting body weight history:', error);
@@ -218,6 +233,10 @@ export async function getBodyWeightHistory(): Promise<BodyWeightEntry[]> {
 export async function addBodyWeightEntry(weight: number, date?: string): Promise<BodyWeightEntry[]> {
   if (isNaN(weight) || weight <= 0) return [];
   try {
+    const { data: { user } } = await supabase.auth.getUser();
+    const storageKey = getStorageKey(user?.id);
+    const historyKey = getStorageHistoryKey(user?.id);
+
     const history = await getBodyWeightHistory();
     const newEntry: BodyWeightEntry = {
       id: Date.now().toString(),
@@ -229,14 +248,14 @@ export async function addBodyWeightEntry(weight: number, date?: string): Promise
     const updated = [newEntry, ...history.filter(h => h.id !== newEntry.id)];
     updated.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
 
-    await AsyncStorage.setItem(STORAGE_HISTORY_KEY, JSON.stringify(updated));
-    await AsyncStorage.setItem(STORAGE_KEY, weight.toString());
+    await AsyncStorage.setItem(historyKey, JSON.stringify(updated));
+    await AsyncStorage.setItem(storageKey, weight.toString());
 
     await supabase.auth.updateUser({
       data: {
         body_weight: weight,
         body_weight_history: updated,
-      }
+      },
     });
 
     return updated;

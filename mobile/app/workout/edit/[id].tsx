@@ -3,7 +3,7 @@ import { View, Text, StyleSheet, TouchableOpacity, ActivityIndicator, Platform, 
 import { Image } from 'expo-image';
 import { useLocalSearchParams, useRouter, useFocusEffect } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { ArrowLeft, GripVertical, Edit2 } from 'lucide-react-native';
+import { ArrowLeft, GripVertical, Edit2, Plus } from 'lucide-react-native';
 import { supabase } from '../../../src/lib/supabase';
 import { Workout } from '../../../src/types';
 import DraggableFlatList, { RenderItemParams, ScaleDecorator } from 'react-native-draggable-flatlist';
@@ -238,6 +238,24 @@ export default function WorkoutEditScreen() {
       </ScaleDecorator>
     );
   };
+  const renderEmptyState = () => (
+    <TouchableOpacity
+      style={styles.emptyContainer}
+      activeOpacity={0.7}
+      onPress={() => router.push('/(tabs)/exercises')}
+    >
+      <View style={styles.emptyIconCircle}>
+        <Plus size={22} color="#A3E635" />
+      </View>
+      <Text style={styles.emptyText}>
+        Denna workout är tom. Lägg till en övning genom att trycka på{' '}
+        <Text style={styles.emptyHighlight}>"+ Lägg till i workout"</Text>
+      </Text>
+      <View style={styles.emptyButton}>
+        <Text style={styles.emptyButtonText}>Bläddra bland övningar</Text>
+      </View>
+    </TouchableOpacity>
+  );
 
   return (
     <GestureHandlerRootView style={{ flex: 1 }}>
@@ -245,6 +263,7 @@ export default function WorkoutEditScreen() {
         <DraggableFlatList
           data={groupedExercises}
           ListHeaderComponent={renderHeader()}
+          ListEmptyComponent={renderEmptyState()}
           onDragEnd={({ data }) => onDragEnd(data)}
           keyExtractor={(item, index) => item.exerciseId || index.toString()}
           renderItem={renderGroup}
@@ -404,5 +423,51 @@ const styles = StyleSheet.create({
     color: '#F8FAFC',
     fontSize: 14,
     fontWeight: '500',
+  },
+  emptyContainer: {
+    marginHorizontal: 24,
+    marginTop: 20,
+    borderWidth: 1.5,
+    borderColor: '#3F3F46',
+    borderStyle: 'dashed',
+    borderRadius: 16,
+    paddingVertical: 28,
+    paddingHorizontal: 20,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: 'rgba(24, 24, 27, 0.5)',
+  },
+  emptyIconCircle: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    backgroundColor: 'rgba(163, 230, 53, 0.12)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginBottom: 12,
+  },
+  emptyText: {
+    color: '#94A3B8',
+    fontSize: 14,
+    textAlign: 'center',
+    lineHeight: 22,
+    marginBottom: 16,
+  },
+  emptyHighlight: {
+    color: '#F8FAFC',
+    fontWeight: '700',
+  },
+  emptyButton: {
+    backgroundColor: '#272A34',
+    paddingVertical: 10,
+    paddingHorizontal: 18,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: '#3F3F46',
+  },
+  emptyButtonText: {
+    color: '#A3E635',
+    fontSize: 13,
+    fontWeight: '700',
   },
 });

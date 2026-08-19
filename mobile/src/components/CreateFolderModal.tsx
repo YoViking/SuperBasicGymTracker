@@ -1,5 +1,18 @@
 import React, { useState } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, Modal, TextInput, Platform, KeyboardAvoidingView, Image } from 'react-native';
+import {
+  View,
+  Text,
+  StyleSheet,
+  TouchableOpacity,
+  Modal,
+  TextInput,
+  Platform,
+  KeyboardAvoidingView,
+  Image,
+  ScrollView,
+  TouchableWithoutFeedback,
+  Keyboard,
+} from 'react-native';
 import * as ImagePicker from 'expo-image-picker';
 import { Image as ImageIcon } from 'lucide-react-native';
 
@@ -16,6 +29,7 @@ export default function CreateFolderModal({ visible, onClose, onCreate }: Create
 
   const handleCreate = () => {
     if (folderName.trim()) {
+      Keyboard.dismiss();
       onCreate(folderName.trim(), description.trim(), imageBase64);
       setFolderName('');
       setDescription('');
@@ -24,6 +38,7 @@ export default function CreateFolderModal({ visible, onClose, onCreate }: Create
   };
 
   const handleClose = () => {
+    Keyboard.dismiss();
     setFolderName('');
     setDescription('');
     setImageBase64(null);
@@ -53,66 +68,80 @@ export default function CreateFolderModal({ visible, onClose, onCreate }: Create
     >
       <KeyboardAvoidingView 
         style={styles.modalOverlay} 
-        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
       >
-        <TouchableOpacity style={styles.modalOverlayDismiss} activeOpacity={1} onPress={handleClose} />
-        <View style={styles.modalContent}>
-          <Text style={styles.title}>Skapa ett program</Text>
-          
-          <View style={styles.inputContainer}>
-            <TextInput
-              style={styles.input}
-              placeholder="Namn"
-              placeholderTextColor="#94A3B8"
-              value={folderName}
-              onChangeText={setFolderName}
-              selectionColor="#A3E635"
-            />
-          </View>
+        <ScrollView
+          contentContainerStyle={styles.scrollContainer}
+          keyboardShouldPersistTaps="always"
+          bounces={false}
+        >
+          <TouchableWithoutFeedback onPress={handleClose}>
+            <View style={styles.modalOverlayDismiss} />
+          </TouchableWithoutFeedback>
 
-          <View style={styles.inputContainer}>
-            <TextInput
-              style={styles.input}
-              placeholder="Kort beskrivning"
-              placeholderTextColor="#94A3B8"
-              value={description}
-              onChangeText={setDescription}
-              selectionColor="#A3E635"
-            />
-          </View>
-
-          <View style={styles.imagePickerRow}>
-            {imageBase64 ? (
-              <TouchableOpacity onPress={pickImage} style={styles.imagePreviewContainer}>
-                <Image 
-                  source={{ uri: `data:image/jpeg;base64,${imageBase64}` }} 
-                  style={styles.imagePreview} 
-                />
-              </TouchableOpacity>
-            ) : (
-              <TouchableOpacity style={styles.imagePickerButton} onPress={pickImage}>
-                <ImageIcon size={20} color="#F8FAFC" style={{ marginRight: 8 }} />
-                <Text style={styles.imagePickerText}>Lägg till bild</Text>
-              </TouchableOpacity>
-            )}
+          <View style={styles.modalContent}>
+            <Text style={styles.title}>Skapa ett program</Text>
             
-            <View style={styles.buttonContainer}>
-              <TouchableOpacity onPress={handleClose} style={styles.button}>
-                <Text style={styles.cancelButtonText}>AVBRYT</Text>
-              </TouchableOpacity>
-              <TouchableOpacity 
-                onPress={handleCreate} 
-                style={styles.button}
-                disabled={!folderName.trim()}
-              >
-                <Text style={[styles.createButtonText, !folderName.trim() && styles.disabledButtonText]}>
-                  SKAPA
-                </Text>
-              </TouchableOpacity>
+            <View style={styles.inputContainer}>
+              <TextInput
+                style={styles.input}
+                placeholder="Namn"
+                placeholderTextColor="#94A3B8"
+                value={folderName}
+                onChangeText={setFolderName}
+                selectionColor="#A3E635"
+                autoFocus={true}
+                returnKeyType="next"
+              />
             </View>
-          </View>
 
-        </View>
+            <View style={styles.inputContainer}>
+              <TextInput
+                style={styles.input}
+                placeholder="Kort beskrivning"
+                placeholderTextColor="#94A3B8"
+                value={description}
+                onChangeText={setDescription}
+                selectionColor="#A3E635"
+                returnKeyType="done"
+                onSubmitEditing={handleCreate}
+              />
+            </View>
+
+            <View style={styles.imagePickerRow}>
+              {imageBase64 ? (
+                <TouchableOpacity onPress={pickImage} style={styles.imagePreviewContainer}>
+                  <Image 
+                    source={{ uri: `data:image/jpeg;base64,${imageBase64}` }} 
+                    style={styles.imagePreview} 
+                  />
+                </TouchableOpacity>
+              ) : (
+                <TouchableOpacity style={styles.imagePickerButton} onPress={pickImage}>
+                  <ImageIcon size={20} color="#F8FAFC" style={{ marginRight: 8 }} />
+                  <Text style={styles.imagePickerText}>Lägg till bild</Text>
+                </TouchableOpacity>
+              )}
+              
+              <View style={styles.buttonContainer}>
+                <TouchableOpacity onPress={handleClose} style={styles.button}>
+                  <Text style={styles.cancelButtonText}>AVBRYT</Text>
+                </TouchableOpacity>
+                <TouchableOpacity 
+                  onPress={handleCreate} 
+                  style={styles.button}
+                  disabled={!folderName.trim()}
+                  activeOpacity={0.7}
+                >
+                  <Text style={[styles.createButtonText, !folderName.trim() && styles.disabledButtonText]}>
+                    SKAPA
+                  </Text>
+                </TouchableOpacity>
+              </View>
+            </View>
+
+          </View>
+        </ScrollView>
       </KeyboardAvoidingView>
     </Modal>
   );
@@ -121,21 +150,26 @@ export default function CreateFolderModal({ visible, onClose, onCreate }: Create
 const styles = StyleSheet.create({
   modalOverlay: {
     flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.7)',
+    backgroundColor: 'rgba(0,0,0,0.75)',
+  },
+  scrollContainer: {
+    flexGrow: 1,
     justifyContent: 'center',
     alignItems: 'center',
+    padding: 20,
   },
   modalOverlayDismiss: {
     ...StyleSheet.absoluteFillObject,
   },
   modalContent: {
     backgroundColor: '#0A0A0A',
-    borderRadius: 8,
+    borderRadius: 12,
     padding: 24,
-    width: '85%',
+    width: '100%',
     maxWidth: 400,
     borderWidth: 1,
     borderColor: '#27272A',
+    zIndex: 10,
   },
   title: {
     color: '#F8FAFC',

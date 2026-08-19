@@ -3,7 +3,7 @@ import { View, Text, StyleSheet, TouchableOpacity, ActivityIndicator, Platform, 
 import { Image } from 'expo-image';
 import { useLocalSearchParams, useRouter, useFocusEffect } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { ArrowLeft, MoreVertical, Edit2, Dumbbell, Repeat, Trash2, X } from 'lucide-react-native';
+import { ArrowLeft, MoreVertical, Edit2, Dumbbell, Repeat, Trash2, X, Plus } from 'lucide-react-native';
 import { supabase } from '../../src/lib/supabase';
 import { Workout } from '../../src/types';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
@@ -504,14 +504,39 @@ export default function WorkoutDetailScreen() {
       </TouchableOpacity>
     );
   };
-
-  const renderFooter = () => (
-    <View style={styles.footerContainer}>
-      <TouchableOpacity style={styles.finishButton} onPress={finishWorkout}>
-        <Text style={styles.finishButtonText}>Slutför Workout</Text>
-      </TouchableOpacity>
-    </View>
+  const renderEmptyState = () => (
+    <TouchableOpacity
+      style={styles.emptyContainer}
+      activeOpacity={0.7}
+      onPress={() => router.push(`/workout/edit/${id}`)}
+    >
+      <View style={styles.emptyIconCircle}>
+        <Plus size={22} color="#A3E635" />
+      </View>
+      <Text style={styles.emptyText}>
+        Denna workout är tom. Lägg till en övning genom att trycka på{' '}
+        <Text style={styles.emptyHighlight}>"+ Lägg till i workout"</Text>
+      </Text>
+      <View style={styles.emptyButton}>
+        <Text style={styles.emptyButtonText}>Gå till Redigera & Övningar</Text>
+      </View>
+    </TouchableOpacity>
   );
+
+  const renderFooter = () => {
+    const hasStartedWorkout = isWorkoutActive || workoutTimeElapsed > 0 || completedSetsCount > 0;
+    if (groupedExercises.length === 0 || !hasStartedWorkout) {
+      return null;
+    }
+
+    return (
+      <View style={styles.footerContainer}>
+        <TouchableOpacity style={styles.finishButton} onPress={finishWorkout}>
+          <Text style={styles.finishButtonText}>Slutför Workout</Text>
+        </TouchableOpacity>
+      </View>
+    );
+  };
 
   return (
     <GestureHandlerRootView style={{ flex: 1 }}>
@@ -520,6 +545,7 @@ export default function WorkoutDetailScreen() {
           data={groupedExercises}
           ListHeaderComponent={renderHeader}
           ListFooterComponent={renderFooter}
+          ListEmptyComponent={renderEmptyState}
           keyExtractor={(item, index) => item.exerciseId || index.toString()}
           renderItem={renderGroup}
           extraData={activeExerciseId}
@@ -788,5 +814,51 @@ const styles = StyleSheet.create({
     color: '#FF3B3E',
     fontSize: 16,
     fontWeight: '600',
+  },
+  emptyContainer: {
+    marginHorizontal: 24,
+    marginTop: 32,
+    borderWidth: 1.5,
+    borderColor: '#3F3F46',
+    borderStyle: 'dashed',
+    borderRadius: 16,
+    paddingVertical: 28,
+    paddingHorizontal: 20,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: 'rgba(24, 24, 27, 0.5)',
+  },
+  emptyIconCircle: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    backgroundColor: 'rgba(163, 230, 53, 0.12)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginBottom: 12,
+  },
+  emptyText: {
+    color: '#94A3B8',
+    fontSize: 14,
+    textAlign: 'center',
+    lineHeight: 22,
+    marginBottom: 16,
+  },
+  emptyHighlight: {
+    color: '#F8FAFC',
+    fontWeight: '700',
+  },
+  emptyButton: {
+    backgroundColor: '#272A34',
+    paddingVertical: 10,
+    paddingHorizontal: 18,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: '#3F3F46',
+  },
+  emptyButtonText: {
+    color: '#A3E635',
+    fontSize: 13,
+    fontWeight: '700',
   },
 });
