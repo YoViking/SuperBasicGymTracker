@@ -13,6 +13,7 @@
     },
     "android": {
       "package": "com.yoviking.workoutplayer",
+      "versionCode": 1,
       "adaptiveIcon": {
         "backgroundColor": "#0A0A0A",
         "foregroundImage": "./assets/android-icon-foreground.png",
@@ -30,6 +31,12 @@
       "expo-router",
       "expo-font",
       "expo-web-browser"
-    ]
+    ],
+    "extra": {
+      "router": {},
+      "eas": {
+        "projectId": "d83fc15b-f7ac-415a-b524-6482a06fb477"
+      }
+    }
   }
 }
