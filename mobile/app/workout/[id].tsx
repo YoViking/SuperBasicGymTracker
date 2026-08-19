@@ -10,6 +10,8 @@ import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { getMuscleGroupImage } from '../../src/utils/images';
 import WorkoutPlayer from '../../src/components/WorkoutPlayer';
 import { calculateSetVolume, getUserBodyWeight } from '../../src/utils/volume';
+import WorkoutSummaryModal, { WorkoutSummaryData } from '../../src/components/WorkoutSummaryModal';
+import { detectWorkoutRecords } from '../../src/services/recordDetector';
 
 const { width } = Dimensions.get('window');
 
@@ -57,6 +59,10 @@ export default function WorkoutDetailScreen() {
   const [workoutTimeElapsed, setWorkoutTimeElapsed] = useState(0);
   const [isWorkoutActive, setIsWorkoutActive] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
+
+  // Summary Modal State
+  const [summaryData, setSummaryData] = useState<WorkoutSummaryData | null>(null);
+  const [summaryModalVisible, setSummaryModalVisible] = useState(false);
 
   // Options Modal State
   const [optionsModalVisible, setOptionsModalVisible] = useState(false);
@@ -281,6 +287,8 @@ export default function WorkoutDetailScreen() {
       setIsWorkoutActive(false);
 
       let totalVolume = 0;
+      let totalReps = 0;
+      let completedSetsCount = 0;
       const userWeight = await getUserBodyWeight();
       const exerciseLogs: any[] = [];
       
@@ -295,19 +303,34 @@ export default function WorkoutDetailScreen() {
               group.equipment,
               userWeight
             );
+            totalReps += (set.reps || 0);
+            completedSetsCount += 1;
           });
+          const maxWeight = Math.max(...doneSets.map(s => s.weight || 0));
+          const setsAtMax = doneSets.filter(s => (s.weight || 0) === maxWeight);
+          const maxRepsAtMax = Math.max(...setsAtMax.map(s => s.reps || 0), 0);
+
           exerciseLogs.push({
             exercise_name: group.exerciseName,
             muscle_group: group.muscleGroup,
             sets: doneSets.length,
-            weight: Math.max(...doneSets.map(s => s.weight)),
-            reps: Math.round(doneSets.reduce((sum, s) => sum + s.reps, 0) / doneSets.length)
+            weight: maxWeight,
+            reps: maxRepsAtMax
           });
         }
       });
 
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) throw new Error("Du är inte inloggad");
+
+      // Detect PR achievements before inserting new logs
+      const exercisesForDetection = groupedExercises.map(g => ({
+        exerciseName: g.exerciseName,
+        muscleGroup: g.muscleGroup,
+        sets: g.sets.map(s => ({ reps: s.reps, weight: s.weight, is_done: s.is_done }))
+      }));
+
+      const achievements = await detectWorkoutRecords(user.id, exercisesForDetection);
 
       const { data: logData, error: logError } = await supabase
         .from('workout_logs')
@@ -356,10 +379,18 @@ export default function WorkoutDetailScreen() {
         }
       }
 
-      if (Platform.OS === 'android') {
-        ToastAndroid.show('Workout sparad!', ToastAndroid.SHORT);
-      }
-      router.replace('/(tabs)/user');
+      setSummaryData({
+        workoutName: workout.name,
+        durationSeconds: workoutTimeElapsed,
+        totalReps,
+        totalVolume,
+        completedSetsCount,
+        completedExercisesCount: exerciseLogs.length,
+        achievements,
+      });
+
+      setIsSaving(false);
+      setSummaryModalVisible(true);
     } catch (error: any) {
       console.error('Error saving workout:', error);
       if (Platform.OS === 'android') {
@@ -367,6 +398,11 @@ export default function WorkoutDetailScreen() {
       }
       setIsSaving(false);
     }
+  };
+
+  const handleCloseSummary = () => {
+    setSummaryModalVisible(false);
+    router.replace('/(tabs)/user');
   };
 
   // Collage Logic
@@ -538,6 +574,13 @@ export default function WorkoutDetailScreen() {
             </View>
           </View>
         </Modal>
+
+        {/* Workout Completion Summary Card */}
+        <WorkoutSummaryModal
+          visible={summaryModalVisible}
+          summary={summaryData}
+          onClose={handleCloseSummary}
+        />
       </SafeAreaView>
     </GestureHandlerRootView>
   );
