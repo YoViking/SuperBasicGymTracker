@@ -131,6 +131,20 @@ export default function SettingsScreen() {
                 <Text style={styles.signOutText}>Logga ut</Text>
               </TouchableOpacity>
             </View>
+
+            <TouchableOpacity
+              style={[styles.settingCard, { marginTop: 12 }]}
+              onPress={() => router.push('/reset-password')}
+              activeOpacity={0.7}
+            >
+              <View style={styles.settingTextContainer}>
+                <Text style={styles.settingTitle}>Byt lösenord</Text>
+                <Text style={styles.settingSubtitle}>
+                  Uppdatera ditt kontolösenord
+                </Text>
+              </View>
+              <ChevronRight size={20} color="#94A3B8" />
+            </TouchableOpacity>
           </View>
         ) : null}
       </ScrollView>

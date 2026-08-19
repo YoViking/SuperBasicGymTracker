@@ -3,8 +3,11 @@ import { StatusBar } from 'expo-status-bar';
 import { useFonts, Bangers_400Regular } from '@expo-google-fonts/bangers';
 import { Poppins_900Black } from '@expo-google-fonts/poppins';
 import { ActivityIndicator, View, LogBox } from 'react-native';
+import * as Linking from 'expo-linking';
 import { AuthProvider, useAuth } from '../src/context/AuthContext';
 import { useEffect } from 'react';
+import { supabase } from '../src/lib/supabase';
+import { isRecoveryUrl, handleAuthUrl } from '../src/services/auth';
 
 LogBox.ignoreLogs([
   'Android Push notifications (remote notifications) functionality',
@@ -16,13 +19,39 @@ function RootLayoutNav() {
   const router = useRouter();
 
   useEffect(() => {
+    // Listen for PASSWORD_RECOVERY event from Supabase
+    const { data: authListener } = supabase.auth.onAuthStateChange((event) => {
+      if (event === 'PASSWORD_RECOVERY') {
+        router.replace('/reset-password');
+      }
+    });
+
+    const checkUrl = async (url: string | null) => {
+      if (url && isRecoveryUrl(url)) {
+        const res = await handleAuthUrl(url);
+        if (res.success) {
+          router.replace('/reset-password');
+        }
+      }
+    };
+
+    Linking.getInitialURL().then(checkUrl);
+    const sub = Linking.addEventListener('url', (e) => checkUrl(e.url));
+
+    return () => {
+      authListener.subscription.unsubscribe();
+      sub.remove();
+    };
+  }, []);
+
+  useEffect(() => {
     if (loading) return;
 
-    const inAuthGroup = segments[0] === 'auth';
+    const inAuthGroup = segments[0] === 'auth' || segments[0] === 'reset-password';
 
     if (!session && !inAuthGroup) {
       router.replace('/auth');
-    } else if (session && inAuthGroup) {
+    } else if (session && segments[0] === 'auth') {
       router.replace('/(tabs)/user');
     }
   }, [session, loading, segments]);
@@ -30,6 +59,7 @@ function RootLayoutNav() {
   return (
     <Stack screenOptions={{ headerShown: false }}>
       <Stack.Screen name="auth" options={{ headerShown: false }} />
+      <Stack.Screen name="reset-password" options={{ headerShown: false }} />
       <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
       <Stack.Screen name="settings" options={{ headerShown: false }} />
       <Stack.Screen name="exercise/[id]" options={{ headerShown: false }} />

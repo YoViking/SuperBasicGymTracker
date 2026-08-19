@@ -16,7 +16,15 @@ import { supabase } from '../src/lib/supabase';
 import { useRouter } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import Svg, { Path } from 'react-native-svg';
-import { signInWithGoogle, handleAuthUrl } from '../src/services/auth';
+import { ArrowLeft, CheckCircle2, KeyRound, Mail, Lock, ShieldCheck } from 'lucide-react-native';
+import {
+  signInWithGoogle,
+  handleAuthUrl,
+  sendPasswordResetEmail,
+  updatePassword,
+  verifyRecoveryOtp,
+  isRecoveryUrl,
+} from '../src/services/auth';
 
 function GoogleIcon({ size = 20 }: { size?: number }) {
   return (
@@ -41,36 +49,63 @@ function GoogleIcon({ size = 20 }: { size?: number }) {
   );
 }
 
+type AuthMode = 'LOGIN' | 'FORGOT_PASSWORD' | 'UPDATE_PASSWORD';
+
 export default function AuthScreen() {
+  const [mode, setMode] = useState<AuthMode>('LOGIN');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  
+  // Password reset states
+  const [resetEmail, setResetEmail] = useState('');
+  const [resetSent, setResetSent] = useState(false);
+  const [otpCode, setOtpCode] = useState('');
+  const [newPassword, setNewPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
+
   const [loading, setLoading] = useState(false);
   const [loadingGoogle, setLoadingGoogle] = useState(false);
   const router = useRouter();
 
+  const processIncomingUrl = async (url: string) => {
+    if (!url) return;
+    const res = await handleAuthUrl(url);
+    if (res.success) {
+      if (res.isRecovery) {
+        setMode('UPDATE_PASSWORD');
+      } else {
+        router.replace('/(tabs)/user');
+      }
+    } else if (res.errorCode === 'otp_expired') {
+      Alert.alert(
+        'Länken har gått ut',
+        'Länken i mailet förbrukades av webbläsaren eller har gått ut. Ange den 6-siffriga koden från mailet direkt här i appen istället.'
+      );
+      setMode('FORGOT_PASSWORD');
+      setResetSent(true);
+    }
+  };
+
   useEffect(() => {
     // Check if app was opened via deep link
-    Linking.getInitialURL().then(url => {
-      if (url) {
-        handleAuthUrl(url).then(success => {
-          if (success) {
-            router.replace('/(tabs)/user');
-          }
-        });
-      }
+    Linking.getInitialURL().then((url) => {
+      if (url) processIncomingUrl(url);
     });
 
     const subscription = Linking.addEventListener('url', async (event) => {
-      if (event.url) {
-        const success = await handleAuthUrl(event.url);
-        if (success) {
-          router.replace('/(tabs)/user');
-        }
+      if (event.url) processIncomingUrl(event.url);
+    });
+
+    // Supabase auth state listener for password recovery
+    const { data: authListener } = supabase.auth.onAuthStateChange((event) => {
+      if (event === 'PASSWORD_RECOVERY') {
+        setMode('UPDATE_PASSWORD');
       }
     });
 
     return () => {
       subscription.remove();
+      authListener.subscription.unsubscribe();
     };
   }, []);
 
@@ -135,6 +170,98 @@ export default function AuthScreen() {
     setLoading(false);
   }
 
+  async function handleSendResetEmail() {
+    const targetEmail = resetEmail.trim() || email.trim();
+    if (!targetEmail) {
+      Alert.alert('Ange e-post', 'Vänligen ange din e-postadress för att få en återställningskod/länk.');
+      return;
+    }
+
+    setLoading(true);
+    const result = await sendPasswordResetEmail(targetEmail);
+    setLoading(false);
+
+    if (result.success) {
+      setResetSent(true);
+    } else {
+      Alert.alert('Fel vid återställning', result.error || 'Kunde inte skicka återställningslänk.');
+    }
+  }
+
+  async function handleResetWithOtpAndNewPassword() {
+    const targetEmail = resetEmail.trim() || email.trim();
+    if (!targetEmail) {
+      Alert.alert('Ange e-post', 'Vänligen ange din e-postadress.');
+      return;
+    }
+
+    if (!otpCode.trim()) {
+      Alert.alert('Ange kod', 'Vänligen ange den 6-siffriga koden från ditt mail.');
+      return;
+    }
+
+    if (!newPassword || newPassword.length < 6) {
+      Alert.alert('Ogiltigt lösenord', 'Lösenordet måste vara minst 6 tecken långt.');
+      return;
+    }
+
+    if (newPassword !== confirmPassword) {
+      Alert.alert('Lösenorden matchar inte', 'Kontrollera att båda lösenordsfälten är identiska.');
+      return;
+    }
+
+    setLoading(true);
+    // 1. Verify 6-digit OTP code to establish authenticated recovery session
+    const otpResult = await verifyRecoveryOtp(targetEmail, otpCode);
+    if (!otpResult.success) {
+      setLoading(false);
+      Alert.alert('Ogiltig kod', otpResult.error || 'Koden är ogiltig eller har gått ut. Kontrollera mailet och försök igen.');
+      return;
+    }
+
+    // 2. Set new password
+    const updateResult = await updatePassword(newPassword);
+    setLoading(false);
+
+    if (updateResult.success) {
+      Alert.alert('Klart!', 'Ditt lösenord har uppdaterats. Du loggas nu in.', [
+        {
+          text: 'Fortsätt',
+          onPress: () => router.replace('/(tabs)/user'),
+        },
+      ]);
+    } else {
+      Alert.alert('Fel', updateResult.error || 'Kunde inte uppdatera lösenordet.');
+    }
+  }
+
+  async function handleSaveNewPassword() {
+    if (!newPassword || newPassword.length < 6) {
+      Alert.alert('Ogiltigt lösenord', 'Lösenordet måste vara minst 6 tecken långt.');
+      return;
+    }
+
+    if (newPassword !== confirmPassword) {
+      Alert.alert('Lösenorden matchar inte', 'Kontrollera att båda fälten innehåller samma lösenord.');
+      return;
+    }
+
+    setLoading(true);
+    const result = await updatePassword(newPassword);
+    setLoading(false);
+
+    if (result.success) {
+      Alert.alert('Klart!', 'Ditt lösenord har uppdaterats. Du loggas nu in.', [
+        {
+          text: 'Fortsätt',
+          onPress: () => router.replace('/(tabs)/user'),
+        },
+      ]);
+    } else {
+      Alert.alert('Fel', result.error || 'Kunde inte uppdatera lösenordet.');
+    }
+  }
+
   const isAnyLoading = loading || loadingGoogle;
 
   return (
@@ -148,84 +275,296 @@ export default function AuthScreen() {
           showsVerticalScrollIndicator={false}
           keyboardShouldPersistTaps="handled"
         >
-          <Text style={styles.title}>SuperBasic</Text>
-          <Text style={styles.subtitle}>Logga in eller skapa ett konto</Text>
-
-          {/* Google Sign-In Button */}
-          <TouchableOpacity
-            style={styles.googleButton}
-            onPress={handleGoogleSignIn}
-            disabled={isAnyLoading}
-            activeOpacity={0.85}
-          >
-            {loadingGoogle ? (
-              <ActivityIndicator color="#0A0A0A" />
-            ) : (
-              <>
-                <GoogleIcon size={20} />
-                <Text style={styles.googleButtonText}>Fortsätt med Google</Text>
-              </>
-            )}
-          </TouchableOpacity>
-
-          {/* Divider */}
-          <View style={styles.dividerRow}>
-            <View style={styles.dividerLine} />
-            <Text style={styles.dividerText}>eller med e-post</Text>
-            <View style={styles.dividerLine} />
-          </View>
-
-          {/* Email & Password Inputs */}
-          <View style={styles.inputContainer}>
-            <TextInput
-              style={styles.input}
-              onChangeText={setEmail}
-              value={email}
-              placeholder="E-postadress"
-              placeholderTextColor="#94A3B8"
-              autoCapitalize="none"
-              keyboardType="email-address"
-              editable={!isAnyLoading}
-            />
-          </View>
-
-          <View style={styles.inputContainer}>
-            <TextInput
-              style={styles.input}
-              onChangeText={setPassword}
-              value={password}
-              secureTextEntry={true}
-              placeholder="Lösenord"
-              placeholderTextColor="#94A3B8"
-              autoCapitalize="none"
-              editable={!isAnyLoading}
-            />
-          </View>
-
-          {/* Action Buttons */}
-          <View style={styles.buttonContainer}>
+          {/* Back button when in sub-modes */}
+          {mode !== 'LOGIN' && (
             <TouchableOpacity
-              style={[styles.button, styles.primaryButton]}
-              disabled={isAnyLoading}
-              onPress={signInWithEmail}
-              activeOpacity={0.85}
+              style={styles.backButton}
+              onPress={() => {
+                setResetSent(false);
+                setOtpCode('');
+                setNewPassword('');
+                setConfirmPassword('');
+                setMode('LOGIN');
+              }}
+              activeOpacity={0.7}
             >
-              {loading ? (
-                <ActivityIndicator color="#0A0A0A" />
+              <ArrowLeft size={20} color="#94A3B8" />
+              <Text style={styles.backButtonText}>Tillbaka till inloggning</Text>
+            </TouchableOpacity>
+          )}
+
+          {/* Mode 1: STANDARD LOGIN */}
+          {mode === 'LOGIN' && (
+            <>
+              <Text style={styles.title}>SuperBasic</Text>
+              <Text style={styles.subtitle}>Logga in eller skapa ett konto</Text>
+
+              {/* Google Sign-In Button */}
+              <TouchableOpacity
+                style={styles.googleButton}
+                onPress={handleGoogleSignIn}
+                disabled={isAnyLoading}
+                activeOpacity={0.85}
+              >
+                {loadingGoogle ? (
+                  <ActivityIndicator color="#0A0A0A" />
+                ) : (
+                  <>
+                    <GoogleIcon size={20} />
+                    <Text style={styles.googleButtonText}>Fortsätt med Google</Text>
+                  </>
+                )}
+              </TouchableOpacity>
+
+              {/* Divider */}
+              <View style={styles.dividerRow}>
+                <View style={styles.dividerLine} />
+                <Text style={styles.dividerText}>eller med e-post</Text>
+                <View style={styles.dividerLine} />
+              </View>
+
+              {/* Email & Password Inputs */}
+              <View style={styles.inputContainer}>
+                <TextInput
+                  style={styles.input}
+                  onChangeText={setEmail}
+                  value={email}
+                  placeholder="E-postadress"
+                  placeholderTextColor="#94A3B8"
+                  autoCapitalize="none"
+                  keyboardType="email-address"
+                  editable={!isAnyLoading}
+                />
+              </View>
+
+              <View style={styles.inputContainer}>
+                <TextInput
+                  style={styles.input}
+                  onChangeText={setPassword}
+                  value={password}
+                  secureTextEntry={true}
+                  placeholder="Lösenord"
+                  placeholderTextColor="#94A3B8"
+                  autoCapitalize="none"
+                  editable={!isAnyLoading}
+                />
+              </View>
+
+              {/* Forgot Password Link */}
+              <TouchableOpacity
+                style={styles.forgotPasswordButton}
+                onPress={() => {
+                  setResetEmail(email);
+                  setResetSent(false);
+                  setMode('FORGOT_PASSWORD');
+                }}
+                disabled={isAnyLoading}
+                activeOpacity={0.7}
+              >
+                <Text style={styles.forgotPasswordText}>Glömt lösenord?</Text>
+              </TouchableOpacity>
+
+              {/* Action Buttons */}
+              <View style={styles.buttonContainer}>
+                <TouchableOpacity
+                  style={[styles.button, styles.primaryButton]}
+                  disabled={isAnyLoading}
+                  onPress={signInWithEmail}
+                  activeOpacity={0.85}
+                >
+                  {loading ? (
+                    <ActivityIndicator color="#0A0A0A" />
+                  ) : (
+                    <Text style={styles.primaryButtonText}>Logga In</Text>
+                  )}
+                </TouchableOpacity>
+
+                <TouchableOpacity
+                  style={[styles.button, styles.secondaryButton]}
+                  disabled={isAnyLoading}
+                  onPress={signUpWithEmail}
+                  activeOpacity={0.85}
+                >
+                  <Text style={styles.secondaryButtonText}>Skapa Konto</Text>
+                </TouchableOpacity>
+              </View>
+            </>
+          )}
+
+          {/* Mode 2: FORGOT PASSWORD */}
+          {mode === 'FORGOT_PASSWORD' && (
+            <>
+              {resetSent ? (
+                <View style={styles.formContainer}>
+                  <View style={styles.successIconWrapper}>
+                    <ShieldCheck size={44} color="#A3E635" />
+                  </View>
+                  <Text style={styles.modeTitle}>Kolla din inkorg</Text>
+                  <Text style={styles.modeSubtitle}>
+                    Vi har skickat ett mail till{' '}
+                    <Text style={styles.highlightText}>{resetEmail || email}</Text>. Fyll i den 6-siffriga koden och ditt nya lösenord nedan.
+                  </Text>
+
+                  {/* OTP Code Input */}
+                  <View style={styles.inputContainer}>
+                    <TextInput
+                      style={[styles.input, styles.otpInput]}
+                      onChangeText={setOtpCode}
+                      value={otpCode}
+                      placeholder="6-siffrig kod (t.ex. 123456)"
+                      placeholderTextColor="#94A3B8"
+                      keyboardType="number-pad"
+                      maxLength={6}
+                      editable={!loading}
+                    />
+                  </View>
+
+                  {/* New Password Inputs */}
+                  <View style={styles.inputContainer}>
+                    <TextInput
+                      style={styles.input}
+                      onChangeText={setNewPassword}
+                      value={newPassword}
+                      secureTextEntry={true}
+                      placeholder="Nytt lösenord (minst 6 tecken)"
+                      placeholderTextColor="#94A3B8"
+                      autoCapitalize="none"
+                      editable={!loading}
+                    />
+                  </View>
+
+                  <View style={styles.inputContainer}>
+                    <TextInput
+                      style={styles.input}
+                      onChangeText={setConfirmPassword}
+                      value={confirmPassword}
+                      secureTextEntry={true}
+                      placeholder="Bekräfta nytt lösenord"
+                      placeholderTextColor="#94A3B8"
+                      autoCapitalize="none"
+                      editable={!loading}
+                    />
+                  </View>
+
+                  <View style={styles.buttonContainer}>
+                    <TouchableOpacity
+                      style={[styles.button, styles.primaryButton]}
+                      disabled={loading}
+                      onPress={handleResetWithOtpAndNewPassword}
+                      activeOpacity={0.85}
+                    >
+                      {loading ? (
+                        <ActivityIndicator color="#0A0A0A" />
+                      ) : (
+                        <Text style={styles.primaryButtonText}>Spara nytt lösenord</Text>
+                      )}
+                    </TouchableOpacity>
+
+                    <TouchableOpacity
+                      style={[styles.button, styles.secondaryButton]}
+                      disabled={loading}
+                      onPress={handleSendResetEmail}
+                      activeOpacity={0.85}
+                    >
+                      <Text style={styles.secondaryButtonText}>Skicka ny kod</Text>
+                    </TouchableOpacity>
+                  </View>
+                </View>
               ) : (
-                <Text style={styles.primaryButtonText}>Logga In</Text>
-              )}
-            </TouchableOpacity>
+                <>
+                  <View style={styles.iconHeader}>
+                    <KeyRound size={36} color="#A3E635" />
+                  </View>
+                  <Text style={styles.modeTitle}>Återställ lösenord</Text>
+                  <Text style={styles.modeSubtitle}>
+                    Ange din e-postadress så skickar vi en kod/länk för att återställa ditt lösenord.
+                  </Text>
 
-            <TouchableOpacity
-              style={[styles.button, styles.secondaryButton]}
-              disabled={isAnyLoading}
-              onPress={signUpWithEmail}
-              activeOpacity={0.85}
-            >
-              <Text style={styles.secondaryButtonText}>Skapa Konto</Text>
-            </TouchableOpacity>
-          </View>
+                  <View style={styles.inputContainer}>
+                    <TextInput
+                      style={styles.input}
+                      onChangeText={setResetEmail}
+                      value={resetEmail || email}
+                      placeholder="E-postadress"
+                      placeholderTextColor="#94A3B8"
+                      autoCapitalize="none"
+                      keyboardType="email-address"
+                      editable={!loading}
+                    />
+                  </View>
+
+                  <View style={styles.buttonContainer}>
+                    <TouchableOpacity
+                      style={[styles.button, styles.primaryButton]}
+                      disabled={loading}
+                      onPress={handleSendResetEmail}
+                      activeOpacity={0.85}
+                    >
+                      {loading ? (
+                        <ActivityIndicator color="#0A0A0A" />
+                      ) : (
+                        <Text style={styles.primaryButtonText}>Skicka återställningskod</Text>
+                      )}
+                    </TouchableOpacity>
+                  </View>
+                </>
+              )}
+            </>
+          )}
+
+          {/* Mode 3: UPDATE PASSWORD (opened from verified recovery link) */}
+          {mode === 'UPDATE_PASSWORD' && (
+            <>
+              <View style={styles.iconHeader}>
+                <Lock size={36} color="#A3E635" />
+              </View>
+              <Text style={styles.modeTitle}>Välj nytt lösenord</Text>
+              <Text style={styles.modeSubtitle}>
+                Ange ditt nya lösenord nedan. Lösenordet måste innehålla minst 6 tecken.
+              </Text>
+
+              <View style={styles.inputContainer}>
+                <TextInput
+                  style={styles.input}
+                  onChangeText={setNewPassword}
+                  value={newPassword}
+                  secureTextEntry={true}
+                  placeholder="Nytt lösenord"
+                  placeholderTextColor="#94A3B8"
+                  autoCapitalize="none"
+                  editable={!loading}
+                />
+              </View>
+
+              <View style={styles.inputContainer}>
+                <TextInput
+                  style={styles.input}
+                  onChangeText={setConfirmPassword}
+                  value={confirmPassword}
+                  secureTextEntry={true}
+                  placeholder="Bekräfta nytt lösenord"
+                  placeholderTextColor="#94A3B8"
+                  autoCapitalize="none"
+                  editable={!loading}
+                />
+              </View>
+
+              <View style={styles.buttonContainer}>
+                <TouchableOpacity
+                  style={[styles.button, styles.primaryButton]}
+                  disabled={loading}
+                  onPress={handleSaveNewPassword}
+                  activeOpacity={0.85}
+                >
+                  {loading ? (
+                    <ActivityIndicator color="#0A0A0A" />
+                  ) : (
+                    <Text style={styles.primaryButtonText}>Spara nytt lösenord</Text>
+                  )}
+                </TouchableOpacity>
+              </View>
+            </>
+          )}
         </ScrollView>
       </KeyboardAvoidingView>
     </SafeAreaView>
@@ -245,6 +584,30 @@ const styles = StyleSheet.create({
     padding: 24,
     justifyContent: 'center',
   },
+  backButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 28,
+    gap: 8,
+    alignSelf: 'flex-start',
+  },
+  backButtonText: {
+    color: '#94A3B8',
+    fontSize: 15,
+    fontWeight: '600',
+  },
+  iconHeader: {
+    width: 64,
+    height: 64,
+    borderRadius: 32,
+    backgroundColor: '#1E293B',
+    alignItems: 'center',
+    justifyContent: 'center',
+    alignSelf: 'center',
+    marginBottom: 20,
+    borderWidth: 1,
+    borderColor: '#334155',
+  },
   title: {
     fontFamily: 'Bangers_400Regular',
     fontSize: 46,
@@ -253,11 +616,30 @@ const styles = StyleSheet.create({
     marginBottom: 6,
     letterSpacing: 1,
   },
+  modeTitle: {
+    fontSize: 26,
+    fontWeight: '800',
+    color: '#F8FAFC',
+    textAlign: 'center',
+    marginBottom: 8,
+  },
   subtitle: {
     color: '#94A3B8',
     fontSize: 15,
     textAlign: 'center',
     marginBottom: 32,
+  },
+  modeSubtitle: {
+    color: '#94A3B8',
+    fontSize: 15,
+    lineHeight: 22,
+    textAlign: 'center',
+    marginBottom: 28,
+    paddingHorizontal: 8,
+  },
+  highlightText: {
+    color: '#A3E635',
+    fontWeight: '700',
   },
   googleButton: {
     flexDirection: 'row',
@@ -308,8 +690,25 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: '#27272A',
   },
+  otpInput: {
+    letterSpacing: 3,
+    fontSize: 18,
+    textAlign: 'center',
+    fontWeight: '700',
+    borderColor: '#3F3F46',
+  },
+  forgotPasswordButton: {
+    alignSelf: 'flex-end',
+    marginBottom: 16,
+    paddingVertical: 4,
+  },
+  forgotPasswordText: {
+    color: '#94A3B8',
+    fontSize: 14,
+    fontWeight: '600',
+  },
   buttonContainer: {
-    marginTop: 12,
+    marginTop: 6,
     gap: 12,
   },
   button: {
@@ -335,5 +734,20 @@ const styles = StyleSheet.create({
     color: '#A3E635',
     fontSize: 16,
     fontWeight: '800',
+  },
+  formContainer: {
+    width: '100%',
+  },
+  successIconWrapper: {
+    width: 80,
+    height: 80,
+    borderRadius: 40,
+    backgroundColor: 'rgba(163, 230, 53, 0.1)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 20,
+    alignSelf: 'center',
+    borderWidth: 1,
+    borderColor: 'rgba(163, 230, 53, 0.25)',
   },
 });
