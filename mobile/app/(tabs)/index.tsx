@@ -10,7 +10,7 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Image } from 'expo-image';
 import { useRouter } from 'expo-router';
-import { MoreVertical } from 'lucide-react-native';
+import { MoreVertical, Dumbbell } from 'lucide-react-native';
 import { useWeeklyStats } from '../../src/hooks/useWeeklyStats';
 import { useHomeData } from '../../src/hooks/useHomeData';
 import { getMuscleGroupImage } from '../../src/utils/images';
@@ -74,8 +74,7 @@ export default function HomeScreen() {
       .filter(Boolean) as any[];
 
     if (images.length === 0) {
-      const fallback = getMuscleGroupImage(undefined);
-      images = [fallback, fallback, fallback, fallback];
+      return [];
     }
 
     while (images.length > 0 && images.length < 4) {
@@ -272,12 +271,18 @@ export default function HomeScreen() {
                         onPress={() => router.push(`/workout/${workout.id}`)}
                         activeOpacity={0.7}
                       >
-                        <View style={styles.collageGrid}>
-                          <Image source={collage[0]} style={styles.collageImage} />
-                          <Image source={collage[1]} style={styles.collageImage} />
-                          <Image source={collage[2]} style={styles.collageImage} />
-                          <Image source={collage[3]} style={styles.collageImage} />
-                        </View>
+                        {collage.length === 4 ? (
+                          <View style={styles.collageGrid}>
+                            <Image source={collage[0]} style={styles.collageImage} />
+                            <Image source={collage[1]} style={styles.collageImage} />
+                            <Image source={collage[2]} style={styles.collageImage} />
+                            <Image source={collage[3]} style={styles.collageImage} />
+                          </View>
+                        ) : (
+                          <View style={styles.emptyThumbnail}>
+                            <Dumbbell size={18} color="#64748B" />
+                          </View>
+                        )}
                         <View style={styles.programTextContainer}>
                           <Text style={styles.programTitle} numberOfLines={1}>
                             {workout.name}
@@ -534,6 +539,16 @@ const styles = StyleSheet.create({
   collageImage: {
     width: 20,
     height: 20,
+  },
+  emptyThumbnail: {
+    width: 40,
+    height: 40,
+    borderRadius: 8,
+    backgroundColor: '#141820',
+    borderWidth: 1,
+    borderColor: '#2D3442',
+    justifyContent: 'center',
+    alignItems: 'center',
   },
   programTextContainer: {
     flex: 1,

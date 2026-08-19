@@ -2,7 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { View, Text, StyleSheet, FlatList, ActivityIndicator, TouchableOpacity, Platform, ToastAndroid } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter, useLocalSearchParams } from 'expo-router';
-import { ArrowLeft, MoreVertical, Pencil } from 'lucide-react-native';
+import { ArrowLeft, MoreVertical, Pencil, Dumbbell } from 'lucide-react-native';
 import { supabase } from '../../src/lib/supabase';
 import { Workout, Folder } from '../../src/types';
 import WorkoutMenuModal from '../../src/components/WorkoutMenuModal';
@@ -271,8 +271,7 @@ export default function FolderScreen() {
     }).filter(Boolean) as any[];
 
     if (images.length === 0) {
-      const fallback = getMuscleGroupImage(undefined);
-      images = [fallback, fallback, fallback, fallback];
+      return [];
     }
 
     while (images.length > 0 && images.length < 4) {
@@ -291,12 +290,18 @@ export default function FolderScreen() {
         activeOpacity={0.7}
         onPress={() => router.push(`/workout/${item.id}`)}
       >
-        <View style={styles.collageGrid}>
-          <Image source={collage[0]} style={styles.collageImage} />
-          <Image source={collage[1]} style={styles.collageImage} />
-          <Image source={collage[2]} style={styles.collageImage} />
-          <Image source={collage[3]} style={styles.collageImage} />
-        </View>
+        {collage.length === 4 ? (
+          <View style={styles.collageGrid}>
+            <Image source={collage[0]} style={styles.collageImage} />
+            <Image source={collage[1]} style={styles.collageImage} />
+            <Image source={collage[2]} style={styles.collageImage} />
+            <Image source={collage[3]} style={styles.collageImage} />
+          </View>
+        ) : (
+          <View style={styles.emptyThumbnail}>
+            <Dumbbell size={20} color="#64748B" />
+          </View>
+        )}
         <View style={styles.workoutInfo}>
           <Text style={styles.workoutTitle}>{item.name}</Text>
           <Text style={styles.workoutDate}>{formattedDate}</Text>
@@ -453,6 +458,16 @@ const styles = StyleSheet.create({
     backgroundColor: '#18181B',
     borderWidth: 0.5,
     borderColor: '#0A0A0A',
+  },
+  emptyThumbnail: {
+    width: 48,
+    height: 48,
+    borderRadius: 6,
+    backgroundColor: '#18181B',
+    borderWidth: 1,
+    borderColor: '#27272A',
+    justifyContent: 'center',
+    alignItems: 'center',
   },
   workoutInfo: {
     flex: 1,
