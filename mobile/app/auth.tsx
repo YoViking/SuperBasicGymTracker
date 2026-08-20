@@ -10,6 +10,7 @@ import {
   Platform,
   Alert,
   ScrollView,
+  Image,
 } from 'react-native';
 import * as Linking from 'expo-linking';
 import { supabase } from '../src/lib/supabase';
@@ -298,7 +299,13 @@ export default function AuthScreen() {
           {/* Mode 1: STANDARD LOGIN */}
           {mode === 'LOGIN' && (
             <>
-              <Text style={styles.title}>Workout Player</Text>
+              <View style={styles.logoWrapper}>
+                <Image
+                  source={require('../assets/images/logo.png')}
+                  style={styles.logoImage}
+                  resizeMode="contain"
+                />
+              </View>
               <Text style={styles.subtitle}>Logga in eller skapa ett konto</Text>
 
               {/* Google Sign-In Button */}
@@ -637,12 +644,21 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: '#334155',
   },
+  logoWrapper: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 20,
+  },
+  logoImage: {
+    width: 155,
+    height: 155,
+  },
   title: {
     fontFamily: 'Bangers_400Regular',
-    fontSize: 46,
+    fontSize: 44,
     color: '#A3E635',
     textAlign: 'center',
-    marginBottom: 6,
+    marginBottom: 4,
     letterSpacing: 1,
   },
   modeTitle: {
