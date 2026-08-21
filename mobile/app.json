@@ -9,7 +9,10 @@
     "userInterfaceStyle": "dark",
     "ios": {
       "supportsTablet": true,
-      "bundleIdentifier": "com.yoviking.workoutplayer"
+      "bundleIdentifier": "com.yoviking.workoutplayer",
+      "infoPlist": {
+        "ITSAppUsesNonExemptEncryption": false
+      }
     },
     "android": {
       "package": "com.yoviking.workoutplayer",
@@ -30,7 +33,14 @@
       "expo-secure-store",
       "expo-router",
       "expo-font",
-      "expo-web-browser"
+      "expo-web-browser",
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "Workout Player behöver tillgång till dina foton för att välja en bild till dina träningsmappar.",
+          "cameraPermission": "Workout Player behöver tillgång till kameran för att ta bilder till dina träningsmappar."
+        }
+      ]
     ],
     "extra": {
       "router": {},
