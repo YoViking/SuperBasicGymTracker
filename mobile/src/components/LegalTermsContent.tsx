@@ -38,18 +38,18 @@ export default function LegalTermsContent() {
           <View style={[styles.iconBox, { backgroundColor: 'rgba(163, 230, 53, 0.15)' }]}>
             <Copyright size={20} color="#A3E635" />
           </View>
-          <Text style={styles.sectionTitle}>2. Upphovsrätt & Immateriella rättigheter</Text>
+          <Text style={styles.sectionTitle}>2. Upphovsrätt & Tredjepartsinnehåll</Text>
         </View>
         <Text style={styles.paragraph}>
-          Allt innehåll, inklusive men inte begränsat till källkod, algoritmer, design, användargränssnitt, grafik, logotyper, ljudeffekter och databasstrukturer i <Text style={styles.boldWhite}>Workout Player</Text> tillhör Joakim Viking och skyddas av svensk och internationell upphovsrättslagstiftning.
+          Källkod, applikationsarkitektur, gränssnittsdesign, varumärke, logotyper och ljudeffekter i <Text style={styles.boldWhite}>Workout Player</Text> tillhör Joakim Viking och skyddas av upphovsrättslagstiftning.
         </Text>
         <View style={styles.copyrightHighlightBox}>
           <Text style={styles.copyrightText}>
-            Copyright © 2026 Workout Player / Joakim Viking. Alla rättigheter förbehållna.
+            Copyright © 2026 Workout Player / Joakim Viking. Alla rättigheter förbehållna för applikationen.
           </Text>
         </View>
         <Text style={styles.paragraph}>
-          Otillåten kopiering, vidarespridning, dekompilering, återskapande (reverse engineering) eller kommersiell exploatering av appen eller dess delar är uttryckligen förbjuden utan skriftligt medgivande.
+          <Text style={styles.boldWhite}>Övningsdatabas & Illustrationer:</Text> Övningsnamn, anatomiska beskrivningar, illustrationer och animationer tillhandahålls i pedagogiskt syfte och härrör från externa datakällor och licensierade/öppna träningsdatabaser (bl.a. ExerciseDB). Dessa tillhör respektive rättighetsinnehavare och upphovsmän. Workout Player gör inget anspråk på äganderätt till detta externa material.
         </Text>
       </View>
 
