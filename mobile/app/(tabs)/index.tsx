@@ -222,98 +222,84 @@ export default function HomeScreen() {
             </View>
 
             {/* Section 3: Senaste */}
-            <View style={styles.sectionHeader}>
-              <Text style={styles.sectionTitle}>Senaste</Text>
-            </View>
-
-            <View style={styles.senasteRow}>
-              {/* Program Folder Square Card (Left) */}
-              <TouchableOpacity
-                style={styles.programFolderCard}
-                activeOpacity={0.8}
-                onPress={() => {
-                  if (folderToRender) {
-                    router.push({
-                      pathname: '/folder/[id]',
-                      params: { id: folderToRender.id, name: folderToRender.name },
-                    });
-                  } else {
-                    router.push('/workouts');
-                  }
-                }}
-              >
-                {folderToRender?.image_url ? (
-                  <Image
-                    source={{ uri: folderToRender.image_url }}
-                    style={styles.folderImageBackground}
-                    contentFit="cover"
-                  />
-                ) : (
-                  <Image
-                    source={require('../../assets/images/bicep.png')}
-                    style={styles.folderImageBackground}
-                    contentFit="cover"
-                  />
-                )}
-                <View style={styles.folderOverlay}>
-                  <Text style={styles.folderOverlayTitle} numberOfLines={2}>
-                    {folderToRender?.name ? folderToRender.name.toUpperCase() : 'HULK'}
-                  </Text>
+            {(folderToRender || homeData.latestWorkouts.length > 0) && (
+              <>
+                <View style={styles.sectionHeader}>
+                  <Text style={styles.sectionTitle}>Senaste</Text>
                 </View>
-              </TouchableOpacity>
 
-              {/* Workouts List with 2x2 collage thumbnail grid (Right) */}
-              <View style={styles.programList}>
-                {homeData.latestWorkouts.length === 0 ? (
-                  <TouchableOpacity
-                    style={styles.programItemCard}
-                    onPress={() => router.push('/workouts')}
-                  >
-                    <View style={styles.collageGrid}>
-                      <View style={[styles.collageImage, { backgroundColor: '#38BDF8' }]} />
-                      <View style={[styles.collageImage, { backgroundColor: '#F472B6' }]} />
-                      <View style={[styles.collageImage, { backgroundColor: '#A7F3D0' }]} />
-                      <View style={[styles.collageImage, { backgroundColor: '#F87171' }]} />
+                <View style={styles.senasteRow}>
+                  {/* Program Folder Square Card (Left) */}
+                  {folderToRender && (
+                    <TouchableOpacity
+                      style={styles.programFolderCard}
+                      activeOpacity={0.8}
+                      onPress={() => {
+                        router.push({
+                          pathname: '/folder/[id]',
+                          params: { id: folderToRender.id, name: folderToRender.name },
+                        });
+                      }}
+                    >
+                      {folderToRender.image_url ? (
+                        <Image
+                          source={{ uri: folderToRender.image_url }}
+                          style={styles.folderImageBackground}
+                          contentFit="cover"
+                        />
+                      ) : (
+                        <Image
+                          source={require('../../assets/images/bicep.png')}
+                          style={styles.folderImageBackground}
+                          contentFit="cover"
+                        />
+                      )}
+                      <View style={styles.folderOverlay}>
+                        <Text style={styles.folderOverlayTitle} numberOfLines={2}>
+                          {folderToRender.name.toUpperCase()}
+                        </Text>
+                      </View>
+                    </TouchableOpacity>
+                  )}
+
+                  {/* Workouts List with 2x2 collage thumbnail grid (Right) */}
+                  {homeData.latestWorkouts.length > 0 && (
+                    <View style={[styles.programList, !folderToRender && { flex: 1 }]}>
+                      {homeData.latestWorkouts.map((workout) => {
+                        const collage = getCollageImages(workout);
+                        return (
+                          <TouchableOpacity
+                            key={workout.id}
+                            style={styles.programItemCard}
+                            onPress={() => router.push(`/workout/${workout.id}`)}
+                            activeOpacity={0.7}
+                          >
+                            {collage.length === 4 ? (
+                              <View style={styles.collageGrid}>
+                                <Image source={collage[0]} style={styles.collageImage} />
+                                <Image source={collage[1]} style={styles.collageImage} />
+                                <Image source={collage[2]} style={styles.collageImage} />
+                                <Image source={collage[3]} style={styles.collageImage} />
+                              </View>
+                            ) : (
+                              <View style={styles.emptyThumbnail}>
+                                <Dumbbell size={18} color="#64748B" />
+                              </View>
+                            )}
+                            <View style={styles.programTextContainer}>
+                              <Text style={styles.programTitle} numberOfLines={1}>
+                                {workout.name}
+                              </Text>
+                              <Text style={styles.programSubtitle}>av dig</Text>
+                            </View>
+                          </TouchableOpacity>
+                        );
+                      })}
                     </View>
-                    <View style={styles.programTextContainer}>
-                      <Text style={styles.programTitle}>A Basstyrka & Press</Text>
-                      <Text style={styles.programSubtitle}>av dig</Text>
-                    </View>
-                  </TouchableOpacity>
-                ) : (
-                  homeData.latestWorkouts.map((workout) => {
-                    const collage = getCollageImages(workout);
-                    return (
-                      <TouchableOpacity
-                        key={workout.id}
-                        style={styles.programItemCard}
-                        onPress={() => router.push(`/workout/${workout.id}`)}
-                        activeOpacity={0.7}
-                      >
-                        {collage.length === 4 ? (
-                          <View style={styles.collageGrid}>
-                            <Image source={collage[0]} style={styles.collageImage} />
-                            <Image source={collage[1]} style={styles.collageImage} />
-                            <Image source={collage[2]} style={styles.collageImage} />
-                            <Image source={collage[3]} style={styles.collageImage} />
-                          </View>
-                        ) : (
-                          <View style={styles.emptyThumbnail}>
-                            <Dumbbell size={18} color="#64748B" />
-                          </View>
-                        )}
-                        <View style={styles.programTextContainer}>
-                          <Text style={styles.programTitle} numberOfLines={1}>
-                            {workout.name}
-                          </Text>
-                          <Text style={styles.programSubtitle}>av dig</Text>
-                        </View>
-                      </TouchableOpacity>
-                    );
-                  })
-                )}
-              </View>
-            </View>
+                  )}
+                </View>
+              </>
+            )}
 
             {/* Section 4: Dagens övning */}
             <View style={styles.sectionHeader}>

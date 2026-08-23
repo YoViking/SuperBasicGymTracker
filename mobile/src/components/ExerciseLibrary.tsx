@@ -2,12 +2,28 @@ import React, { useEffect, useState } from 'react';
 import { View, Text, StyleSheet, TextInput, TouchableOpacity, SectionList, ActivityIndicator, Modal, Pressable, ScrollView, Platform, ToastAndroid } from 'react-native';
 import { Image } from 'expo-image';
 import { supabase } from '../lib/supabase';
-import { Search, MoreVertical, Plus, Dumbbell, Bookmark, EyeOff, X } from 'lucide-react-native';
+import { Search, MoreVertical, Plus, Dumbbell, Bookmark, EyeOff, X, Trophy } from 'lucide-react-native';
 import { ExerciseLibrary as Exercise } from '../types';
 import { useRouter } from 'expo-router';
 import { useBookmarks } from '../hooks/useBookmarks';
 
 const MUSCLE_GROUPS = ['All', 'Chest', 'Back', 'Legs', 'Arms', 'Shoulders', 'Core', 'Glutes', 'Other', 'Bookmarked'];
+
+const MUSCLE_GROUP_DISPLAY: Record<string, string> = {
+  Chest: 'Bröst',
+  Back: 'Rygg',
+  Legs: 'Ben',
+  Arms: 'Armar',
+  Shoulders: 'Axlar',
+  Core: 'Core',
+  Glutes: 'Glutes',
+  Other: 'Övrigt',
+  Bröst: 'Bröst',
+  Rygg: 'Rygg',
+  Ben: 'Ben',
+  Armar: 'Armar',
+  Axlar: 'Axlar',
+};
 
 const EQUIPMENT_OPTIONS = [
   { id: 'All', label: 'All' },
@@ -182,7 +198,8 @@ export default function ExerciseLibrary({
 
     // Group by muscle_group for the SectionList
     const grouped = filtered.reduce((acc, curr) => {
-      const group = curr.muscle_group || 'Other';
+      const rawGroup = curr.muscle_group || 'Other';
+      const group = MUSCLE_GROUP_DISPLAY[rawGroup] || rawGroup;
       if (!acc[group]) {
         acc[group] = [];
       }
@@ -335,6 +352,18 @@ export default function ExerciseLibrary({
           </ScrollView>
         </View>
       </View>
+
+      {/* Top / Leaderboard button */}
+      {!replaceMode && (
+        <TouchableOpacity
+          style={styles.topNavButton}
+          onPress={() => router.push('/exercise/top')}
+          activeOpacity={0.7}
+        >
+          <Trophy size={20} color="#F8FAFC" style={styles.topIcon} />
+          <Text style={styles.topNavButtonText}>Top</Text>
+        </TouchableOpacity>
+      )}
 
       {loading ? (
         <ActivityIndicator size="large" color="#A3E635" style={{ marginTop: 40 }} />
@@ -520,6 +549,22 @@ const styles = StyleSheet.create({
   },
   activeFilterText: {
     color: '#A3E635',
+    fontWeight: '700',
+  },
+  topNavButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    alignSelf: 'flex-start',
+    gap: 8,
+    paddingVertical: 6,
+    marginBottom: 8,
+  },
+  topIcon: {
+    marginRight: 2,
+  },
+  topNavButtonText: {
+    color: '#FFFFFF',
+    fontSize: 18,
     fontWeight: '700',
   },
   listContent: {
