@@ -1,7 +1,7 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { supabase } from '../lib/supabase';
 
-export const DEFAULT_BODY_WEIGHT = 75;
+export const DEFAULT_BODY_WEIGHT = 100;
 
 export interface BodyWeightEntry {
   id: string;
