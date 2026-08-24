@@ -19,8 +19,11 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import Svg, { Path } from 'react-native-svg';
 import { ArrowLeft, CheckCircle2, KeyRound, Mail, Lock, ShieldCheck } from 'lucide-react-native';
 import TermsModal from '../src/components/TermsModal';
+import * as AppleAuthentication from 'expo-apple-authentication';
 import {
   signInWithGoogle,
+  signInWithApple,
+  isAppleAuthAvailable,
   handleAuthUrl,
   sendPasswordResetEmail,
   updatePassword,
@@ -68,7 +71,13 @@ export default function AuthScreen() {
 
   const [loading, setLoading] = useState(false);
   const [loadingGoogle, setLoadingGoogle] = useState(false);
+  const [loadingApple, setLoadingApple] = useState(false);
+  const [appleAuthAvailable, setAppleAuthAvailable] = useState(false);
   const router = useRouter();
+
+  useEffect(() => {
+    isAppleAuthAvailable().then(setAppleAuthAvailable);
+  }, []);
 
   const processIncomingUrl = async (url: string) => {
     if (!url) return;
@@ -111,6 +120,22 @@ export default function AuthScreen() {
       authListener.subscription.unsubscribe();
     };
   }, []);
+
+  async function handleAppleSignIn() {
+    try {
+      setLoadingApple(true);
+      const result = await signInWithApple();
+      if (result.success) {
+        router.replace('/(tabs)/user');
+      } else if (result.error && result.error !== 'Inloggningen avbröts') {
+        Alert.alert('Apple-inloggning', result.error);
+      }
+    } catch (err: any) {
+      Alert.alert('Apple-inloggning', err?.message || 'Ett fel inträffade');
+    } finally {
+      setLoadingApple(false);
+    }
+  }
 
   async function handleGoogleSignIn() {
     try {
@@ -265,7 +290,7 @@ export default function AuthScreen() {
     }
   }
 
-  const isAnyLoading = loading || loadingGoogle;
+  const isAnyLoading = loading || loadingGoogle || loadingApple;
 
   return (
     <SafeAreaView style={styles.container}>
@@ -308,22 +333,43 @@ export default function AuthScreen() {
               </View>
               <Text style={styles.subtitle}>Logga in eller skapa ett konto</Text>
 
-              {/* Google Sign-In Button */}
-              <TouchableOpacity
-                style={styles.googleButton}
-                onPress={handleGoogleSignIn}
-                disabled={isAnyLoading}
-                activeOpacity={0.85}
-              >
-                {loadingGoogle ? (
-                  <ActivityIndicator color="#0A0A0A" />
-                ) : (
-                  <>
-                    <GoogleIcon size={20} />
-                    <Text style={styles.googleButtonText}>Fortsätt med Google</Text>
-                  </>
+              {/* Social Login Buttons */}
+              <View style={styles.socialButtonsContainer}>
+                {appleAuthAvailable && (
+                  <View style={styles.appleButtonContainer}>
+                    {loadingApple ? (
+                      <View style={styles.appleButtonLoading}>
+                        <ActivityIndicator color="#0A0A0A" />
+                      </View>
+                    ) : (
+                      <AppleAuthentication.AppleAuthenticationButton
+                        buttonType={AppleAuthentication.AppleAuthenticationButtonType.CONTINUE}
+                        buttonStyle={AppleAuthentication.AppleAuthenticationButtonStyle.WHITE}
+                        cornerRadius={12}
+                        style={styles.appleButton}
+                        onPress={handleAppleSignIn}
+                      />
+                    )}
+                  </View>
                 )}
-              </TouchableOpacity>
+
+                {/* Google Sign-In Button */}
+                <TouchableOpacity
+                  style={styles.googleButton}
+                  onPress={handleGoogleSignIn}
+                  disabled={isAnyLoading}
+                  activeOpacity={0.85}
+                >
+                  {loadingGoogle ? (
+                    <ActivityIndicator color="#0A0A0A" />
+                  ) : (
+                    <>
+                      <GoogleIcon size={20} />
+                      <Text style={styles.googleButtonText}>Fortsätt med Google</Text>
+                    </>
+                  )}
+                </TouchableOpacity>
+              </View>
 
               {/* Divider */}
               <View style={styles.dividerRow}>
@@ -685,6 +731,28 @@ const styles = StyleSheet.create({
   highlightText: {
     color: '#A3E635',
     fontWeight: '700',
+  },
+  socialButtonsContainer: {
+    gap: 12,
+    width: '100%',
+  },
+  appleButtonContainer: {
+    width: '100%',
+    height: 50,
+    borderRadius: 12,
+    overflow: 'hidden',
+  },
+  appleButton: {
+    width: '100%',
+    height: 50,
+  },
+  appleButtonLoading: {
+    width: '100%',
+    height: 50,
+    backgroundColor: '#FFFFFF',
+    borderRadius: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   googleButton: {
     flexDirection: 'row',

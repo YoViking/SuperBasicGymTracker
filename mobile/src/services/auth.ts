@@ -2,6 +2,8 @@ import * as WebBrowser from 'expo-web-browser';
 import * as AuthSession from 'expo-auth-session';
 import * as Linking from 'expo-linking';
 import Constants, { ExecutionEnvironment } from 'expo-constants';
+import * as AppleAuthentication from 'expo-apple-authentication';
+import * as Crypto from 'expo-crypto';
 import { supabase } from '../lib/supabase';
 
 // Complete any pending auth sessions on web or Android
@@ -194,6 +196,94 @@ export async function signInWithGoogle(): Promise<AuthResult> {
     return {
       success: false,
       error: err?.message || 'Ett oväntat fel inträffade vid inloggning',
+    };
+  }
+}
+
+/**
+ * Checks if Apple Authentication is available on this platform/device.
+ */
+export async function isAppleAuthAvailable(): Promise<boolean> {
+  try {
+    return await AppleAuthentication.isAvailableAsync();
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Initiates native Sign in with Apple on iOS via expo-apple-authentication and Supabase signInWithIdToken.
+ */
+export async function signInWithApple(): Promise<AuthResult> {
+  try {
+    // Generate a secure raw nonce
+    const rawNonce =
+      Math.random().toString(36).substring(2, 15) +
+      Math.random().toString(36).substring(2, 15) +
+      Date.now().toString(36);
+
+    // Hash the nonce using SHA-256 for Apple request
+    const hashedNonce = await Crypto.digestStringAsync(
+      Crypto.CryptoDigestAlgorithm.SHA256,
+      rawNonce
+    );
+
+    // Request credential from Apple
+    const credential = await AppleAuthentication.signInAsync({
+      requestedScopes: [
+        AppleAuthentication.AppleAuthenticationScope.FULL_NAME,
+        AppleAuthentication.AppleAuthenticationScope.EMAIL,
+      ],
+      nonce: hashedNonce,
+    });
+
+    if (!credential.identityToken) {
+      return {
+        success: false,
+        error: 'Kunde inte hämta identitetstoken från Apple',
+      };
+    }
+
+    // Authenticate with Supabase using the ID Token and raw unhashed nonce
+    const { error } = await supabase.auth.signInWithIdToken({
+      provider: 'apple',
+      token: credential.identityToken,
+      nonce: rawNonce,
+    });
+
+    if (error) {
+      console.error('[Auth] Supabase Apple Sign-In error:', error);
+      return { success: false, error: error.message };
+    }
+
+    // If Apple provided fullName (only provided on initial sign in), store in user_metadata
+    if (credential.fullName) {
+      const given = credential.fullName.givenName || '';
+      const family = credential.fullName.familyName || '';
+      const fullName = `${given} ${family}`.trim();
+      if (fullName) {
+        try {
+          await supabase.auth.updateUser({
+            data: {
+              full_name: fullName,
+              name: fullName,
+            },
+          });
+        } catch (updateErr) {
+          console.warn('[Auth] Could not update user metadata with Apple name:', updateErr);
+        }
+      }
+    }
+
+    return { success: true };
+  } catch (err: any) {
+    if (err.code === 'ERR_REQUEST_CANCELED' || err.code === 'ERR_CANCELED') {
+      return { success: false, error: 'Inloggningen avbröts' };
+    }
+    console.error('[Auth] Error during Apple sign-in:', err);
+    return {
+      success: false,
+      error: err?.message || 'Ett oväntat fel inträffade vid Apple-inloggning',
     };
   }
 }
