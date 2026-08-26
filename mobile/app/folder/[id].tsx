@@ -10,7 +10,7 @@ import MoveToFolderModal from '../../src/components/MoveToFolderModal';
 import CreateFolderModal from '../../src/components/CreateFolderModal';
 import EditFolderModal from '../../src/components/EditFolderModal';
 import { Image } from 'expo-image';
-import { getMuscleGroupImage } from '../../src/utils/images';
+import { getMuscleGroupImage, getDefaultWorkoutImage, isAiFolder, isAiWorkout } from '../../src/utils/images';
 import { decode } from 'base64-arraybuffer';
 
 export default function FolderScreen() {
@@ -290,17 +290,14 @@ export default function FolderScreen() {
         activeOpacity={0.7}
         onPress={() => router.push(`/workout/${item.id}`)}
       >
-        {collage.length === 4 ? (
-          <View style={styles.collageGrid}>
-            <Image source={collage[0]} style={styles.collageImage} />
-            <Image source={collage[1]} style={styles.collageImage} />
-            <Image source={collage[2]} style={styles.collageImage} />
-            <Image source={collage[3]} style={styles.collageImage} />
-          </View>
+        {item.image_url ? (
+          <Image source={{ uri: item.image_url }} style={styles.defaultThumbnail} contentFit="cover" />
         ) : (
-          <View style={styles.emptyThumbnail}>
-            <Dumbbell size={20} color="#64748B" />
-          </View>
+          <Image
+            source={getDefaultWorkoutImage(isAiWorkout(item, folders))}
+            style={styles.defaultThumbnail}
+            contentFit="cover"
+          />
         )}
         <View style={styles.workoutInfo}>
           <Text style={styles.workoutTitle}>{item.name}</Text>
@@ -319,10 +316,14 @@ export default function FolderScreen() {
       <View style={styles.programHeaderContainer}>
         <View style={styles.imageWrapper}>
           <TouchableOpacity activeOpacity={0.8} onPress={() => setEditModalVisible(true)} style={styles.programImageCard}>
-            {currentFolder.image_url ? (
+            {currentFolder.image_url && currentFolder.image_url !== 'ai-default' ? (
               <Image source={{ uri: currentFolder.image_url }} style={styles.programImage} contentFit="cover" />
             ) : (
-              <View style={[styles.programImage, { backgroundColor: '#3F3F46' }]} />
+              <Image
+                source={getDefaultWorkoutImage(isAiFolder(currentFolder))}
+                style={styles.programImage}
+                contentFit="cover"
+              />
             )}
             <View style={styles.imageOverlay}>
               <Text style={styles.imageTitle}>{currentFolder.name.toUpperCase()}</Text>
@@ -468,6 +469,14 @@ const styles = StyleSheet.create({
     borderColor: '#27272A',
     justifyContent: 'center',
     alignItems: 'center',
+  },
+  defaultThumbnail: {
+    width: 48,
+    height: 48,
+    borderRadius: 6,
+    backgroundColor: '#18181B',
+    borderWidth: 1,
+    borderColor: '#27272A',
   },
   workoutInfo: {
     flex: 1,

@@ -14,7 +14,7 @@ import { useRouter } from 'expo-router';
 import { MoreVertical, Dumbbell } from 'lucide-react-native';
 import { useWeeklyStats } from '../../src/hooks/useWeeklyStats';
 import { useHomeData } from '../../src/hooks/useHomeData';
-import { getMuscleGroupImage } from '../../src/utils/images';
+import { getMuscleGroupImage, getDefaultWorkoutImage, isAiFolder, isAiWorkout } from '../../src/utils/images';
 import { Workout } from '../../src/types';
 import { cacheService } from '../../src/services/cacheService';
 
@@ -241,7 +241,7 @@ export default function HomeScreen() {
                         });
                       }}
                     >
-                      {folderToRender.image_url ? (
+                      {folderToRender.image_url && folderToRender.image_url !== 'ai-default' ? (
                         <Image
                           source={{ uri: folderToRender.image_url }}
                           style={styles.folderImageBackground}
@@ -249,7 +249,7 @@ export default function HomeScreen() {
                         />
                       ) : (
                         <Image
-                          source={require('../../assets/images/bicep.png')}
+                          source={getDefaultWorkoutImage(isAiFolder(folderToRender))}
                           style={styles.folderImageBackground}
                           contentFit="cover"
                         />
@@ -262,11 +262,11 @@ export default function HomeScreen() {
                     </TouchableOpacity>
                   )}
 
-                  {/* Workouts List with 2x2 collage thumbnail grid (Right) */}
+                  {/* Workouts List with thumbnail (Right) */}
                   {homeData.latestWorkouts.length > 0 && (
                     <View style={[styles.programList, !folderToRender && { flex: 1 }]}>
                       {homeData.latestWorkouts.map((workout) => {
-                        const collage = getCollageImages(workout);
+                        const isAi = isAiWorkout(workout, homeData.latestFolder ? [homeData.latestFolder] : []);
                         return (
                           <TouchableOpacity
                             key={workout.id}
@@ -274,23 +274,20 @@ export default function HomeScreen() {
                             onPress={() => router.push(`/workout/${workout.id}`)}
                             activeOpacity={0.7}
                           >
-                            {collage.length === 4 ? (
-                              <View style={styles.collageGrid}>
-                                <Image source={collage[0]} style={styles.collageImage} />
-                                <Image source={collage[1]} style={styles.collageImage} />
-                                <Image source={collage[2]} style={styles.collageImage} />
-                                <Image source={collage[3]} style={styles.collageImage} />
-                              </View>
+                            {workout.image_url ? (
+                              <Image source={{ uri: workout.image_url }} style={styles.defaultThumbnail} contentFit="cover" />
                             ) : (
-                              <View style={styles.emptyThumbnail}>
-                                <Dumbbell size={18} color="#64748B" />
-                              </View>
+                              <Image
+                                source={getDefaultWorkoutImage(isAi)}
+                                style={styles.defaultThumbnail}
+                                contentFit="cover"
+                              />
                             )}
                             <View style={styles.programTextContainer}>
                               <Text style={styles.programTitle} numberOfLines={1}>
                                 {workout.name}
                               </Text>
-                              <Text style={styles.programSubtitle}>av dig</Text>
+                              <Text style={styles.programSubtitle}>{isAi ? 'av AI' : 'av dig'}</Text>
                             </View>
                           </TouchableOpacity>
                         );
@@ -554,6 +551,14 @@ const styles = StyleSheet.create({
     borderColor: '#2D3442',
     justifyContent: 'center',
     alignItems: 'center',
+  },
+  defaultThumbnail: {
+    width: 40,
+    height: 40,
+    borderRadius: 8,
+    backgroundColor: '#141820',
+    borderWidth: 1,
+    borderColor: '#2D3442',
   },
   programTextContainer: {
     flex: 1,

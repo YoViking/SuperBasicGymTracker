@@ -6,7 +6,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { ArrowLeft, MoreVertical, Edit2, Plus, Play } from 'lucide-react-native';
 import { supabase } from '../../src/lib/supabase';
 import { Workout } from '../../src/types';
-import { getMuscleGroupImage } from '../../src/utils/images';
+import { getMuscleGroupImage, getDefaultWorkoutImage } from '../../src/utils/images';
 import AppBottomNav from '../../src/components/AppBottomNav';
 import { useWorkoutSession, GroupedExercise, FetchedWorkoutExercise } from '../../src/context/WorkoutSessionContext';
 
@@ -57,6 +57,18 @@ export default function WorkoutDetailScreen() {
         .single();
         
       if (workoutError) throw workoutError;
+
+      if (workoutData?.folder_id) {
+        const { data: folderData } = await supabase
+          .from('folders')
+          .select('id, image_url, description, is_ai')
+          .eq('id', workoutData.folder_id)
+          .maybeSingle();
+        if (folderData && (folderData.is_ai || folderData.image_url === 'ai-default' || (folderData.description && folderData.description.toLowerCase().includes('skräddarsytt')))) {
+          workoutData.is_ai = true;
+        }
+      }
+
       setLocalWorkout(workoutData);
 
       const { data: exercisesData, error: exercisesError } = await supabase
@@ -156,14 +168,13 @@ export default function WorkoutDetailScreen() {
         </TouchableOpacity>
       </View>
       
-      {collageImages.length === 4 && (
-        <View style={styles.collageGrid}>
-          <Image source={collageImages[0]} style={styles.collageImage} />
-          <Image source={collageImages[1]} style={styles.collageImage} />
-          <Image source={collageImages[2]} style={styles.collageImage} />
-          <Image source={collageImages[3]} style={styles.collageImage} />
-        </View>
-      )}
+      <View style={styles.defaultHeroWrapper}>
+        <Image
+          source={currentWorkout?.image_url ? { uri: currentWorkout.image_url } : getDefaultWorkoutImage(currentWorkout?.is_ai)}
+          style={styles.defaultHeroImage}
+          contentFit="cover"
+        />
+      </View>
 
       <Text style={styles.workoutTitle}>{currentWorkout?.name}</Text>
       <View style={styles.exercisesCountRow}>
@@ -336,6 +347,20 @@ const styles = StyleSheet.create({
     backgroundColor: '#F8FAFC',
     borderWidth: 0.5,
     borderColor: '#0A0A0A',
+  },
+  defaultHeroWrapper: {
+    width: 160,
+    height: 160,
+    borderRadius: 20,
+    overflow: 'hidden',
+    marginBottom: 16,
+    borderWidth: 1.5,
+    borderColor: '#27272A',
+    backgroundColor: '#18181B',
+  },
+  defaultHeroImage: {
+    width: '100%',
+    height: '100%',
   },
   workoutTitle: {
     color: '#A3E635',

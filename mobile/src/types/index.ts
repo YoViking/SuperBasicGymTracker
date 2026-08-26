@@ -7,6 +7,8 @@ export interface Workout {
   is_archived?: boolean;
   is_deleted?: boolean;
   folder_id?: string | null;
+  is_ai?: boolean;
+  image_url?: string;
   workout_exercises?: Array<{
     order_index?: number;
     created_at?: string;
@@ -23,6 +25,7 @@ export interface Folder {
   name: string;
   description?: string;
   image_url?: string;
+  is_ai?: boolean;
   created_at: string;
 }
 

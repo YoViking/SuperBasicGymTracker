@@ -347,15 +347,32 @@ export async function saveProgramToDatabase(
         .eq('id', folderId);
     } else {
       // 1b. Create the Folder (represents the overall program)
-      const { data: folder, error: folderError } = await supabase
+      let { data: folder, error: folderError } = await supabase
         .from('folders')
         .insert([{
           name: matchedProgram.programName,
           description: matchedProgram.description,
-          user_id: userId
+          user_id: userId,
+          image_url: 'ai-default',
+          is_ai: true
         }])
         .select()
         .single();
+
+      if (folderError && folderError.message.includes('is_ai')) {
+        const fb = await supabase
+          .from('folders')
+          .insert([{
+            name: matchedProgram.programName,
+            description: matchedProgram.description,
+            user_id: userId,
+            image_url: 'ai-default'
+          }])
+          .select()
+          .single();
+        folder = fb.data;
+        folderError = fb.error;
+      }
 
       if (folderError || !folder) {
         throw new Error(`Failed to create program folder: ${folderError?.message}`);
@@ -365,16 +382,31 @@ export async function saveProgramToDatabase(
 
     // 2. Insert workouts and workout exercises sequentially
     for (const w of matchedProgram.workouts) {
-      // Create the workout
-      const { data: workout, error: workoutError } = await supabase
+      // Create the workout (with is_ai: true, with fallback if column not yet added in DB)
+      let { data: workout, error: workoutError } = await supabase
         .from('workouts')
         .insert([{
           name: w.dayName,
           folder_id: folderId,
-          user_id: userId
+          user_id: userId,
+          is_ai: true
         }])
         .select()
         .single();
+
+      if (workoutError && workoutError.message.includes('is_ai')) {
+        const fallback = await supabase
+          .from('workouts')
+          .insert([{
+            name: w.dayName,
+            folder_id: folderId,
+            user_id: userId
+          }])
+          .select()
+          .single();
+        workout = fallback.data;
+        workoutError = fallback.error;
+      }
 
       if (workoutError || !workout) {
         throw new Error(`Failed to create workout: ${workoutError?.message}`);
