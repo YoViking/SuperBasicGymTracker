@@ -304,8 +304,9 @@ export function WorkoutSessionProvider({ children }: { children: React.ReactNode
   const handleGoToExercise = useCallback(() => {
     const targetWorkoutId = optionsWorkoutId || activeWorkout?.id;
     if (optionsExerciseId && targetWorkoutId) {
-      router.push(`/workout/exercise/${targetWorkoutId}/${optionsExerciseId}`);
+      setIsPlayerExpanded(false);
       closeExerciseOptions();
+      router.push(`/workout/exercise/${targetWorkoutId}/${optionsExerciseId}`);
     }
   }, [optionsExerciseId, optionsWorkoutId, activeWorkout, router, closeExerciseOptions]);
 
@@ -314,8 +315,9 @@ export function WorkoutSessionProvider({ children }: { children: React.ReactNode
     if (optionsExerciseId && targetWorkoutId) {
       const activeEx = groupedExercises.find(g => g.exerciseId === optionsExerciseId);
       const muscleGroup = activeEx ? activeEx.muscleGroup : '';
-      router.push(`/workout/replace/${targetWorkoutId}/${optionsExerciseId}?muscleGroup=${encodeURIComponent(muscleGroup)}`);
+      setIsPlayerExpanded(false);
       closeExerciseOptions();
+      router.push(`/workout/replace/${targetWorkoutId}/${optionsExerciseId}?muscleGroup=${encodeURIComponent(muscleGroup)}`);
     }
   }, [optionsExerciseId, optionsWorkoutId, activeWorkout, groupedExercises, router, closeExerciseOptions]);
 

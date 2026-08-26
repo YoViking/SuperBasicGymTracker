@@ -18,7 +18,7 @@ import {
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Image } from 'expo-image';
-import { Play, Pause, SkipForward, SkipBack, Timer, MoreHorizontal, Check, ChevronDown, X, Dumbbell, ChevronRight } from 'lucide-react-native';
+import { Play, Pause, SkipForward, SkipBack, Timer, MoreHorizontal, Check, X, Dumbbell, ChevronRight } from 'lucide-react-native';
 import { Audio } from 'expo-av';
 import * as Notifications from 'expo-notifications';
 import { activateKeepAwakeAsync, deactivateKeepAwake } from 'expo-keep-awake';
@@ -53,6 +53,8 @@ interface WorkoutPlayerProps {
   progressPercentage: number;
   onOptionsPress: () => void;
   bottomNavHeight?: number;
+  hasBottomNav?: boolean;
+  hideMiniPlayer?: boolean;
 }
 
 export default function WorkoutPlayer({
@@ -70,10 +72,14 @@ export default function WorkoutPlayer({
   setIsWorkoutActive,
   progressPercentage,
   onOptionsPress,
-  bottomNavHeight
+  bottomNavHeight,
+  hasBottomNav = true,
+  hideMiniPlayer = false,
 }: WorkoutPlayerProps) {
   const insets = useSafeAreaInsets();
-  const navHeight = bottomNavHeight ?? (Platform.OS === 'ios' ? 84 : 68);
+  const topSheetMargin = Math.max(insets.top + 8, Platform.OS === 'ios' ? 54 : 36);
+  const defaultNavHeight = Platform.OS === 'ios' ? 90 : 74;
+  const navHeight = bottomNavHeight ?? (hasBottomNav ? defaultNavHeight : 0);
   const exerciseDisplayName = activeExercise?.sets?.[0]?.custom_name || activeExercise?.exerciseName || '';
 
   // Editing state for sets
@@ -494,11 +500,13 @@ export default function WorkoutPlayer({
   return (
     <>
       {/* Folded Mini Player */}
-      {!isExpanded && (
+      {!isExpanded && !hideMiniPlayer && (
         <TouchableOpacity
           style={[
             styles.miniPlayer,
-            { bottom: navHeight }
+            hasBottomNav
+              ? { bottom: navHeight }
+              : { bottom: 0, paddingBottom: Math.max(insets.bottom, 12) }
           ]}
           activeOpacity={0.9}
           onPress={() => setIsExpanded(true)}
@@ -553,6 +561,7 @@ export default function WorkoutPlayer({
               style={[
                 styles.modalContainer,
                 {
+                  marginTop: topSheetMargin,
                   transform: [{ translateY: panY }],
                 },
               ]}
@@ -563,43 +572,6 @@ export default function WorkoutPlayer({
                   <View style={styles.dragHandle} />
                 </View>
 
-                <View style={styles.topHeaderRow}>
-                  <TouchableOpacity 
-                    style={styles.collapseButton} 
-                    onPress={() => {
-                      if (editingSetId) {
-                        handleCancelEdit();
-                      } else {
-                        closeModal();
-                      }
-                    }}
-                    activeOpacity={0.7}
-                    hitSlop={{ top: 12, bottom: 12, left: 16, right: 16 }}
-                  >
-                    <ChevronDown size={28} color="#94A3B8" />
-                  </TouchableOpacity>
-
-                  {workoutName ? (
-                    <TouchableOpacity
-                      style={styles.workoutHeaderBadge}
-                      onPress={() => {
-                        closeModal();
-                        onWorkoutTitlePress?.();
-                      }}
-                      activeOpacity={0.7}
-                    >
-                      <Dumbbell size={15} color="#A3E635" />
-                      <Text style={styles.workoutHeaderTitle} numberOfLines={1}>
-                        {workoutName}
-                      </Text>
-                      <ChevronRight size={16} color="#94A3B8" />
-                    </TouchableOpacity>
-                  ) : (
-                    <View style={{ flex: 1 }} />
-                  )}
-
-                  <View style={styles.headerRightSpacer} />
-                </View>
 
                 {/* Dedicated Image Drag Zone with instant touch capture */}
                 <View 
@@ -755,37 +727,62 @@ export default function WorkoutPlayer({
                     </Text>
                   </View>
 
-                  <View style={styles.mainControls}>
-                    <TouchableOpacity 
-                      style={styles.moreBtn} 
-                      onPress={onOptionsPress}
-                      activeOpacity={0.7}
-                      hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
-                    >
-                      <MoreHorizontal size={22} color="#94A3B8" />
+                  <View style={styles.playbackControlsRow}>
+                    <TouchableOpacity onPress={onPrevious} activeOpacity={0.7} hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}>
+                      <SkipBack size={38} color="#F8FAFC" fill="#F8FAFC" />
                     </TouchableOpacity>
 
-                    <View style={styles.playControlsGroup}>
-                      <TouchableOpacity onPress={onPrevious} activeOpacity={0.7} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
-                        <SkipBack size={34} color="#F8FAFC" fill="#F8FAFC" />
-                      </TouchableOpacity>
+                    <TouchableOpacity onPress={() => setIsWorkoutActive(!isWorkoutActive)} style={styles.playButton} activeOpacity={0.7} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
+                      {isWorkoutActive ? (
+                        <Pause size={48} color="#F8FAFC" fill="#F8FAFC" />
+                      ) : (
+                        <Play size={48} color="#F8FAFC" fill="#F8FAFC" />
+                      )}
+                    </TouchableOpacity>
 
-                      <TouchableOpacity onPress={() => setIsWorkoutActive(!isWorkoutActive)} style={styles.playButton} activeOpacity={0.8}>
-                        {isWorkoutActive ? <Pause size={44} color="#0A0A0A" /> : <Play size={44} color="#0A0A0A" fill="#0A0A0A" />}
-                      </TouchableOpacity>
+                    <TouchableOpacity onPress={onNext} activeOpacity={0.7} hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}>
+                      <SkipForward size={38} color="#F8FAFC" fill="#F8FAFC" />
+                    </TouchableOpacity>
+                  </View>
 
-                      <TouchableOpacity onPress={onNext} activeOpacity={0.7} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
-                        <SkipForward size={34} color="#F8FAFC" fill="#F8FAFC" />
-                      </TouchableOpacity>
+                  <View style={styles.bottomUtilityRow}>
+                    <TouchableOpacity 
+                      style={styles.utilityBtn} 
+                      onPress={onOptionsPress}
+                      activeOpacity={0.7}
+                      hitSlop={{ top: 12, bottom: 12, left: 12, right: 8 }}
+                    >
+                      <MoreHorizontal size={22} color="#F8FAFC" />
+                    </TouchableOpacity>
+
+                    <View style={styles.workoutBottomLinkWrapper} pointerEvents="box-none">
+                      {workoutName ? (
+                        <TouchableOpacity
+                          style={styles.workoutBottomLink}
+                          onPress={() => {
+                            closeModal();
+                            onWorkoutTitlePress?.();
+                          }}
+                          activeOpacity={0.7}
+                          hitSlop={{ top: 10, bottom: 10, left: 8, right: 8 }}
+                        >
+                          <Text style={styles.workoutBottomLinkText} numberOfLines={1} ellipsizeMode="tail">
+                            {workoutName}
+                          </Text>
+                        </TouchableOpacity>
+                      ) : null}
                     </View>
 
                     <TouchableOpacity
-                      style={styles.timerBtn}
+                      style={[
+                        styles.utilityBtn,
+                        restTimerActive && styles.utilityBtnActive
+                      ]}
                       onPress={toggleRestTimer}
                       onLongPress={resetRestTimer}
                       delayLongPress={500}
                       activeOpacity={0.7}
-                      hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
+                      hitSlop={{ top: 12, bottom: 12, left: 8, right: 12 }}
                     >
                       <Timer size={22} color={restTimerActive ? "#A3E635" : "#F8FAFC"} />
                     </TouchableOpacity>
@@ -865,7 +862,6 @@ const styles = StyleSheet.create({
     backgroundColor: '#0A0A0A',
     borderTopLeftRadius: 24,
     borderTopRightRadius: 24,
-    marginTop: Platform.OS === 'ios' ? 12 : 8,
     overflow: 'hidden',
     borderTopWidth: 1,
     borderTopColor: '#27272A',
@@ -881,49 +877,14 @@ const styles = StyleSheet.create({
   dragHandleContainer: {
     width: '100%',
     alignItems: 'center',
-    paddingVertical: 6,
+    paddingTop: 6,
+    paddingBottom: 10,
   },
   dragHandle: {
     width: 44,
     height: 5,
     backgroundColor: '#3F3F46',
     borderRadius: 3,
-  },
-  topHeaderRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: 16,
-    paddingVertical: 2,
-    marginBottom: 4,
-  },
-  collapseButton: {
-    width: 36,
-    height: 36,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  workoutHeaderBadge: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: '#1E2024',
-    borderWidth: 1,
-    borderColor: '#2D3039',
-    borderRadius: 20,
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    gap: 6,
-    maxWidth: '72%',
-  },
-  workoutHeaderTitle: {
-    color: '#F8FAFC',
-    fontSize: 13,
-    fontWeight: '700',
-    flexShrink: 1,
-  },
-  headerRightSpacer: {
-    width: 36,
-    height: 36,
   },
   imageDragZone: {
     width: '100%',
@@ -932,11 +893,11 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
   },
   largeImage: {
-    width: width * 0.75,
-    height: width * 0.75,
+    width: Math.min(width * 0.68, 270),
+    height: Math.min(width * 0.68, 270),
     backgroundColor: '#FFFFFF',
     alignSelf: 'center',
-    marginBottom: 12,
+    marginBottom: 10,
     borderRadius: 16,
   },
   compactHeader: {
@@ -979,14 +940,14 @@ const styles = StyleSheet.create({
   },
   modalTitle: {
     color: '#F8FAFC',
-    fontSize: 24,
+    fontSize: 22,
     fontWeight: '700',
-    marginBottom: 12,
+    marginBottom: 10,
     alignSelf: 'flex-start',
     paddingHorizontal: 4,
   },
   setsContainer: {
-    gap: 16,
+    gap: 12,
   },
   setRow: {
     flexDirection: 'row',
@@ -1111,19 +1072,28 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: '600',
   },
-  mainControls: {
+  playbackControlsRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginTop: 8,
+    marginBottom: 8,
+    gap: 48,
+  },
+  playButton: {
+    width: 60,
+    height: 60,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  bottomUtilityRow: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
     marginTop: 10,
     paddingHorizontal: 4,
   },
-  playControlsGroup: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 28,
-  },
-  timerBtn: {
+  utilityBtn: {
     width: 44,
     height: 44,
     borderRadius: 22,
@@ -1133,23 +1103,27 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
   },
-  playButton: {
-    backgroundColor: '#F8FAFC',
-    width: 72,
-    height: 72,
-    borderRadius: 36,
-    justifyContent: 'center',
-    alignItems: 'center',
+  utilityBtnActive: {
+    borderColor: '#A3E635',
+    backgroundColor: 'rgba(163, 230, 53, 0.15)',
   },
-  moreBtn: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
-    backgroundColor: '#1E2024',
-    borderWidth: 1,
-    borderColor: '#2D3039',
-    justifyContent: 'center',
+  workoutBottomLinkWrapper: {
+    flex: 1,
     alignItems: 'center',
-  }
+    justifyContent: 'center',
+    marginHorizontal: 12,
+  },
+  workoutBottomLink: {
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  workoutBottomLinkText: {
+    color: '#CBD5E1',
+    fontSize: 14,
+    fontWeight: '500',
+    textAlign: 'center',
+  },
 });
 

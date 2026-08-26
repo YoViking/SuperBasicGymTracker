@@ -57,11 +57,16 @@ export default function GlobalWorkoutPlayer() {
   // Calculate bottom offset according to current screen's bottom nav
   const segs = segments as string[];
   const isTabsScreen = segs[0] === '(tabs)';
-  const isWorkoutDetailScreen = segs[0] === 'workout';
+  // Only the main workout screen (/workout/[id]) has AppBottomNav, not sub-routes like exercise, replace or edit
+  const isWorkoutDetailScreen = segs[0] === 'workout' && segs.length === 2 && !['exercise', 'replace', 'edit'].includes(segs[1]);
   const hasBottomNav = isTabsScreen || isWorkoutDetailScreen;
 
+  // Hide mini player on "Gå till övning" and "Byt övning" subpages
+  const isExerciseOrReplaceScreen =
+    segs[0] === 'workout' && (segs[1] === 'exercise' || segs[1] === 'replace');
+
   const defaultNavHeight = Platform.OS === 'ios' ? 90 : 74;
-  const bottomNavHeight = hasBottomNav ? defaultNavHeight : Math.max(insets.bottom, 0);
+  const bottomNavHeight = hasBottomNav ? defaultNavHeight : 0;
 
   return (
     <>
@@ -81,6 +86,8 @@ export default function GlobalWorkoutPlayer() {
         progressPercentage={progressPercentage}
         onOptionsPress={() => openExerciseOptions(activeExercise.exerciseId)}
         bottomNavHeight={bottomNavHeight}
+        hasBottomNav={hasBottomNav}
+        hideMiniPlayer={isExerciseOrReplaceScreen}
       />
 
       {/* Options Bottom Sheet */}
