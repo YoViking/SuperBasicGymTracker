@@ -11,7 +11,8 @@ import {
   Animated,
   Dimensions,
   Platform,
-  ToastAndroid
+  ToastAndroid,
+  Alert
 } from 'react-native';
 import {
   X,
@@ -26,7 +27,7 @@ import {
   Clock,
   Zap
 } from 'lucide-react-native';
-import { fetchAIProgram, mapProgramToLibrary, saveProgramToDatabase, MatchedProgram } from '../services/ai';
+import { fetchAIProgram, mapProgramToLibrary, saveProgramToDatabase, checkExistingProgram, MatchedProgram } from '../services/ai';
 import { useAuth } from '../context/AuthContext';
 import { useRouter } from 'expo-router';
 
@@ -232,14 +233,17 @@ export default function AiProgramWizard({ visible, onClose, onSaved }: AiProgram
     }
   };
 
-  const handleSaveProgram = async () => {
-    if (!matchedProgram || !user || saving) return;
+  const performSaveProgram = async (overwriteFolderId?: string) => {
+    if (!matchedProgram || !user) return;
     try {
       setSaving(true);
-      const folderId = await saveProgramToDatabase(matchedProgram, user.id);
+      const folderId = await saveProgramToDatabase(matchedProgram, user.id, overwriteFolderId);
       
       if (Platform.OS === 'android') {
-        ToastAndroid.show('Program sparat!', ToastAndroid.SHORT);
+        ToastAndroid.show(
+          overwriteFolderId ? 'Programmet har ersatts!' : 'Program sparat!',
+          ToastAndroid.SHORT
+        );
       }
       
       onSaved();
@@ -254,9 +258,43 @@ export default function AiProgramWizard({ visible, onClose, onSaved }: AiProgram
       console.error(e);
       if (Platform.OS === 'android') {
         ToastAndroid.show('Kunde inte spara program', ToastAndroid.SHORT);
+      } else {
+        Alert.alert('Fel', 'Kunde inte spara programmet: ' + (e.message || 'Okänt fel'));
       }
     } finally {
       setSaving(false);
+    }
+  };
+
+  const handleSaveProgram = async () => {
+    if (!matchedProgram || !user || saving) return;
+
+    try {
+      setSaving(true);
+      const existing = await checkExistingProgram(matchedProgram.programName, user.id);
+      setSaving(false);
+
+      if (existing.exists && existing.existingFolderId) {
+        Alert.alert(
+          'Programmet finns redan',
+          `Ett program med namnet "${existing.existingFolderName || matchedProgram.programName}" finns redan.\n\nVill du ersätta det gamla programmet eller avbryta?`,
+          [
+            { text: 'Avbryt', style: 'cancel' },
+            {
+              text: 'Ersätt / Skriv över',
+              style: 'destructive',
+              onPress: () => performSaveProgram(existing.existingFolderId)
+            }
+          ]
+        );
+      } else {
+        await performSaveProgram();
+      }
+    } catch (err: any) {
+      setSaving(false);
+      console.error('Error during pre-save duplicate check:', err);
+      // Fallback to saving directly if check fails
+      await performSaveProgram();
     }
   };
 

@@ -6,6 +6,7 @@ import { ArrowLeft } from 'lucide-react-native';
 import ExerciseLibrary from '../../../../src/components/ExerciseLibrary';
 import { supabase } from '../../../../src/lib/supabase';
 import { ExerciseLibrary as Exercise } from '../../../../src/types';
+import { useWorkoutSession } from '../../../../src/context/WorkoutSessionContext';
 
 export default function ReplaceExerciseScreen() {
   const { workoutId, oldExerciseId, muscleGroup } = useLocalSearchParams<{
@@ -15,6 +16,7 @@ export default function ReplaceExerciseScreen() {
   }>();
   
   const router = useRouter();
+  const { activeWorkout, refreshWorkoutExercises } = useWorkoutSession();
   const [isReplacing, setIsReplacing] = useState(false);
 
   const handleReplace = async (newExercise: Exercise) => {
@@ -40,6 +42,10 @@ export default function ReplaceExerciseScreen() {
         .eq('exercise_id', oldExerciseId);
 
       if (error) throw error;
+
+      if (activeWorkout && activeWorkout.id === workoutId) {
+        await refreshWorkoutExercises(workoutId, newExercise.id);
+      }
 
       if (Platform.OS === 'android') {
         ToastAndroid.show('Övning utbytt', ToastAndroid.SHORT);

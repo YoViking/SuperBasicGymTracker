@@ -4,7 +4,6 @@ import {
   Text, 
   StyleSheet, 
   TouchableOpacity, 
-  Modal, 
   Dimensions, 
   Platform, 
   ScrollView, 
@@ -14,10 +13,12 @@ import {
   Keyboard,
   Animated,
   PanResponder,
-  Easing
+  Easing,
+  BackHandler
 } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Image } from 'expo-image';
-import { Play, Pause, SkipForward, SkipBack, Timer, MoreHorizontal, Check, ChevronDown, X } from 'lucide-react-native';
+import { Play, Pause, SkipForward, SkipBack, Timer, MoreHorizontal, Check, ChevronDown, X, Dumbbell, ChevronRight } from 'lucide-react-native';
 import { Audio } from 'expo-av';
 import * as Notifications from 'expo-notifications';
 import { activateKeepAwakeAsync, deactivateKeepAwake } from 'expo-keep-awake';
@@ -38,6 +39,8 @@ const { width, height: SCREEN_HEIGHT } = Dimensions.get('window');
 
 interface WorkoutPlayerProps {
   activeExercise: any; // Using any here to avoid cyclic imports, or we can just pass the necessary data
+  workoutName?: string;
+  onWorkoutTitlePress?: () => void;
   isExpanded: boolean;
   setIsExpanded: (b: boolean) => void;
   onNext: () => void;
@@ -49,10 +52,13 @@ interface WorkoutPlayerProps {
   setIsWorkoutActive: (b: boolean) => void;
   progressPercentage: number;
   onOptionsPress: () => void;
+  bottomNavHeight?: number;
 }
 
 export default function WorkoutPlayer({
   activeExercise,
+  workoutName,
+  onWorkoutTitlePress,
   isExpanded,
   setIsExpanded,
   onNext,
@@ -63,8 +69,13 @@ export default function WorkoutPlayer({
   isWorkoutActive,
   setIsWorkoutActive,
   progressPercentage,
-  onOptionsPress
+  onOptionsPress,
+  bottomNavHeight
 }: WorkoutPlayerProps) {
+  const insets = useSafeAreaInsets();
+  const navHeight = bottomNavHeight ?? (Platform.OS === 'ios' ? 84 : 68);
+  const exerciseDisplayName = activeExercise?.sets?.[0]?.custom_name || activeExercise?.exerciseName || '';
+
   // Editing state for sets
   const [editingSetId, setEditingSetId] = useState<string | null>(null);
   const [editReps, setEditReps] = useState<string>('');
@@ -101,6 +112,30 @@ export default function WorkoutPlayer({
       setModalVisible(false);
     });
   };
+
+  // Handle hardware back button on Android
+  useEffect(() => {
+    const onBackPress = () => {
+      if (modalVisible || isExpanded) {
+        if (editingSetId) {
+          handleCancelEdit();
+        } else {
+          closeModal();
+        }
+        return true;
+      }
+      return false;
+    };
+
+    const backHandlerSubscription = BackHandler.addEventListener(
+      'hardwareBackPress',
+      onBackPress
+    );
+
+    return () => {
+      backHandlerSubscription.remove();
+    };
+  }, [modalVisible, isExpanded, editingSetId]);
 
   useEffect(() => {
     if (isExpanded) {
@@ -308,7 +343,7 @@ export default function WorkoutPlayer({
       const id = await Notifications.scheduleNotificationAsync({
         content: {
           title: "Rest Time Over!",
-          body: `Time for your next set of ${activeExercise?.exerciseName || 'exercise'}!`,
+          body: `Time for your next set of ${exerciseDisplayName || 'exercise'}!`,
           sound: true,
         },
         trigger: {
@@ -461,13 +496,16 @@ export default function WorkoutPlayer({
       {/* Folded Mini Player */}
       {!isExpanded && (
         <TouchableOpacity
-          style={styles.miniPlayer}
+          style={[
+            styles.miniPlayer,
+            { bottom: navHeight }
+          ]}
           activeOpacity={0.9}
           onPress={() => setIsExpanded(true)}
         >
           <View style={styles.miniPlayerContent}>
             <Text style={styles.miniPlayerTitle} numberOfLines={1}>
-              {activeExercise.exerciseName}
+              {exerciseDisplayName}
             </Text>
             <View style={styles.miniPlayerControls}>
               <TouchableOpacity onPress={() => setIsWorkoutActive(!isWorkoutActive)} style={styles.miniIconButton}>
@@ -481,215 +519,227 @@ export default function WorkoutPlayer({
         </TouchableOpacity>
       )}
 
-      {/* Expanded Bottom Sheet Modal */}
-      <Modal
-        visible={modalVisible}
-        transparent={true}
-        animationType="none"
-        statusBarTranslucent={true}
-        onRequestClose={() => {
-          if (editingSetId) {
-            handleCancelEdit();
-          } else {
-            closeModal();
-          }
-        }}
-      >
-        <KeyboardAvoidingView 
-          style={styles.modalRoot}
-          behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-        >
-          {/* Backdrop Overlay */}
-          <Animated.View 
-            style={[
-              styles.modalBackdrop,
-              {
-                opacity: panY.interpolate({
-                  inputRange: [0, SCREEN_HEIGHT * 0.6],
-                  outputRange: [1, 0],
-                  extrapolate: 'clamp',
-                }),
-              },
-            ]}
+      {/* Expanded Bottom Sheet Overlay */}
+      {modalVisible && (
+        <View style={styles.overlayRoot} pointerEvents="box-none">
+          <KeyboardAvoidingView 
+            style={styles.modalRoot}
+            behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+            pointerEvents="box-none"
           >
-            <TouchableOpacity 
-              style={StyleSheet.absoluteFill} 
-              activeOpacity={1} 
-              onPress={() => closeModal()} 
-            />
-          </Animated.View>
-
-          {/* Animated Sheet Container */}
-          <Animated.View 
-            {...panResponder.panHandlers}
-            style={[
-              styles.modalContainer,
-              {
-                transform: [{ translateY: panY }],
-              },
-            ]}
-          >
-            {/* Top Drag & Header Zone */}
-            <View style={styles.dragHeaderZone}>
-              <View style={styles.dragHandleContainer}>
-                <View style={styles.dragHandle} />
-              </View>
-
-              <TouchableOpacity 
-                style={styles.collapseButton} 
-                onPress={() => {
-                  if (editingSetId) {
-                    handleCancelEdit();
-                  } else {
-                    closeModal();
-                  }
-                }}
-                activeOpacity={0.7}
-                hitSlop={{ top: 10, bottom: 10, left: 20, right: 20 }}
-              >
-                <ChevronDown size={28} color="#94A3B8" />
-              </TouchableOpacity>
-
-              {/* Dedicated Image Drag Zone with instant touch capture */}
-              <View 
-                {...imagePanResponder.panHandlers} 
-                style={styles.imageDragZone}
-                collapsable={false}
-              >
-                {editingSetId ? (
-                  <View style={styles.compactHeader}>
-                    {activeExercise.gifUrl ? (
-                      <Image
-                        source={{ uri: activeExercise.gifUrl }}
-                        style={styles.compactThumbnail}
-                        contentFit="cover"
-                        autoplay={false}
-                        pointerEvents="none"
-                      />
-                    ) : (
-                      <Image
-                        source={getMuscleGroupImage(activeExercise.muscleGroup)}
-                        style={styles.compactThumbnail}
-                        contentFit="contain"
-                        autoplay={false}
-                        pointerEvents="none"
-                      />
-                    )}
-                    <View style={styles.compactHeaderText}>
-                      <Text style={styles.compactTitle} numberOfLines={1}>{activeExercise.exerciseName}</Text>
-                      <Text style={styles.compactSubtitle}>Redigera reps & vikt</Text>
-                    </View>
-                  </View>
-                ) : (
-                  <>
-                    {activeExercise.gifUrl ? (
-                      <Image
-                        source={{ uri: activeExercise.gifUrl }}
-                        style={styles.largeImage}
-                        contentFit="cover"
-                        autoplay={isWorkoutActive}
-                        pointerEvents="none"
-                      />
-                    ) : (
-                      <Image
-                        source={getMuscleGroupImage(activeExercise.muscleGroup)}
-                        style={styles.largeImage}
-                        contentFit="contain"
-                        autoplay={false}
-                        pointerEvents="none"
-                      />
-                    )}
-                    <Text style={styles.modalTitle}>{activeExercise.exerciseName}</Text>
-                  </>
-                )}
-              </View>
-            </View>
-
-            {/* Scrollable Sets Details */}
-            <ScrollView 
-              style={styles.exerciseDetails} 
-              contentContainerStyle={{ paddingBottom: 32 }}
-              keyboardShouldPersistTaps="handled"
-              onScroll={(e) => {
-                scrollOffset.current = e.nativeEvent.contentOffset.y;
-              }}
-              scrollEventThrottle={16}
-              bounces={false}
+            {/* Backdrop Overlay */}
+            <Animated.View 
+              style={[
+                styles.modalBackdrop,
+                {
+                  opacity: panY.interpolate({
+                    inputRange: [0, SCREEN_HEIGHT * 0.6],
+                    outputRange: [1, 0],
+                    extrapolate: 'clamp',
+                  }),
+                },
+              ]}
             >
-              <View style={styles.setsContainer}>
-                {activeExercise.sets.map((set: any) => {
-                  const isEditing = editingSetId === set.id;
-                  return (
-                    <View key={set.id} style={[styles.setRow, isEditing && styles.setRowEditing]}>
-                      <TouchableOpacity
-                        style={[styles.checkbox, set.is_done && styles.checkboxChecked]}
-                        onPress={() => handleToggleSet(set.id, set.is_done)}
-                        activeOpacity={0.7}
-                      >
-                        {set.is_done && <Check size={16} color="#0A0A0A" strokeWidth={4} />}
-                      </TouchableOpacity>
-                      
-                      {isEditing ? (
-                        <View style={styles.setInfoEdit}>
-                          <View style={styles.editInputsGroup}>
-                            <View style={styles.editInputWrapper}>
-                              <TextInput
-                                style={styles.editInput}
-                                value={editReps}
-                                onChangeText={setEditReps}
-                                keyboardType="numeric"
-                                selectTextOnFocus
-                                autoFocus
-                                placeholder="0"
-                                placeholderTextColor="#64748B"
-                                returnKeyType="next"
-                              />
-                              <Text style={styles.editUnitText}>reps</Text>
-                            </View>
-                            <View style={styles.editInputWrapper}>
-                              <TextInput
-                                style={styles.editInput}
-                                value={editWeight}
-                                onChangeText={setEditWeight}
-                                keyboardType="decimal-pad"
-                                selectTextOnFocus
-                                placeholder="0"
-                                placeholderTextColor="#64748B"
-                                returnKeyType="done"
-                                onSubmitEditing={handleSaveEdit}
-                              />
-                              <Text style={styles.editUnitText}>kg</Text>
-                            </View>
-                          </View>
-                          <View style={styles.editActions}>
-                            <TouchableOpacity style={styles.saveEditBtn} onPress={handleSaveEdit} activeOpacity={0.7}>
-                              <Check size={18} color="#0A0A0A" strokeWidth={3} />
-                            </TouchableOpacity>
-                            <TouchableOpacity style={styles.cancelEditBtn} onPress={handleCancelEdit} activeOpacity={0.7}>
-                              <X size={18} color="#94A3B8" />
-                            </TouchableOpacity>
-                          </View>
-                        </View>
+              <TouchableOpacity 
+                style={StyleSheet.absoluteFill} 
+                activeOpacity={1} 
+                onPress={() => closeModal()} 
+              />
+            </Animated.View>
+
+            {/* Animated Sheet Container */}
+            <Animated.View 
+              {...panResponder.panHandlers}
+              style={[
+                styles.modalContainer,
+                {
+                  transform: [{ translateY: panY }],
+                },
+              ]}
+            >
+              {/* Top Drag & Header Zone */}
+              <View style={styles.dragHeaderZone}>
+                <View style={styles.dragHandleContainer}>
+                  <View style={styles.dragHandle} />
+                </View>
+
+                <View style={styles.topHeaderRow}>
+                  <TouchableOpacity 
+                    style={styles.collapseButton} 
+                    onPress={() => {
+                      if (editingSetId) {
+                        handleCancelEdit();
+                      } else {
+                        closeModal();
+                      }
+                    }}
+                    activeOpacity={0.7}
+                    hitSlop={{ top: 12, bottom: 12, left: 16, right: 16 }}
+                  >
+                    <ChevronDown size={28} color="#94A3B8" />
+                  </TouchableOpacity>
+
+                  {workoutName ? (
+                    <TouchableOpacity
+                      style={styles.workoutHeaderBadge}
+                      onPress={() => {
+                        closeModal();
+                        onWorkoutTitlePress?.();
+                      }}
+                      activeOpacity={0.7}
+                    >
+                      <Dumbbell size={15} color="#A3E635" />
+                      <Text style={styles.workoutHeaderTitle} numberOfLines={1}>
+                        {workoutName}
+                      </Text>
+                      <ChevronRight size={16} color="#94A3B8" />
+                    </TouchableOpacity>
+                  ) : (
+                    <View style={{ flex: 1 }} />
+                  )}
+
+                  <View style={styles.headerRightSpacer} />
+                </View>
+
+                {/* Dedicated Image Drag Zone with instant touch capture */}
+                <View 
+                  {...imagePanResponder.panHandlers} 
+                  style={styles.imageDragZone}
+                  collapsable={false}
+                >
+                  {editingSetId ? (
+                    <View style={styles.compactHeader}>
+                      {activeExercise.gifUrl ? (
+                        <Image
+                          source={{ uri: activeExercise.gifUrl }}
+                          style={styles.compactThumbnail}
+                          contentFit="cover"
+                          autoplay={false}
+                          pointerEvents="none"
+                        />
                       ) : (
+                        <Image
+                          source={getMuscleGroupImage(activeExercise.muscleGroup)}
+                          style={styles.compactThumbnail}
+                          contentFit="contain"
+                          autoplay={false}
+                          pointerEvents="none"
+                        />
+                      )}
+                      <View style={styles.compactHeaderText}>
+                        <Text style={styles.compactTitle} numberOfLines={1}>{exerciseDisplayName}</Text>
+                        <Text style={styles.compactSubtitle}>Redigera reps & vikt</Text>
+                      </View>
+                    </View>
+                  ) : (
+                    <>
+                      {activeExercise.gifUrl ? (
+                        <Image
+                          source={{ uri: activeExercise.gifUrl }}
+                          style={styles.largeImage}
+                          contentFit="cover"
+                          autoplay={isWorkoutActive}
+                          pointerEvents="none"
+                        />
+                      ) : (
+                        <Image
+                          source={getMuscleGroupImage(activeExercise.muscleGroup)}
+                          style={styles.largeImage}
+                          contentFit="contain"
+                          autoplay={false}
+                          pointerEvents="none"
+                        />
+                      )}
+                      <Text style={styles.modalTitle}>{exerciseDisplayName}</Text>
+                    </>
+                  )}
+                </View>
+              </View>
+
+              {/* Scrollable Sets Details */}
+              <ScrollView 
+                style={styles.exerciseDetails} 
+                contentContainerStyle={{ paddingBottom: 32 }}
+                keyboardShouldPersistTaps="handled"
+                onScroll={(e) => {
+                  scrollOffset.current = e.nativeEvent.contentOffset.y;
+                }}
+                scrollEventThrottle={16}
+                bounces={false}
+              >
+                <View style={styles.setsContainer}>
+                  {activeExercise.sets.map((set: any) => {
+                    const isEditing = editingSetId === set.id;
+                    return (
+                      <View key={set.id} style={[styles.setRow, isEditing && styles.setRowEditing]}>
                         <TouchableOpacity
-                          style={styles.setInfo}
-                          onLongPress={() => handleStartEdit(set)}
-                          delayLongPress={350}
+                          style={[styles.checkbox, set.is_done && styles.checkboxChecked]}
+                          onPress={() => handleToggleSet(set.id, set.is_done)}
                           activeOpacity={0.7}
                         >
-                          <Text style={styles.setText}>{set.reps} reps</Text>
-                          <Text style={styles.weightText}>{set.weight} kg</Text>
+                          {set.is_done && <Check size={16} color="#0A0A0A" strokeWidth={4} />}
                         </TouchableOpacity>
-                      )}
-                    </View>
-                  );
-                })}
-              </View>
-            </ScrollView>
+                        
+                        {isEditing ? (
+                          <View style={styles.setInfoEdit}>
+                            <View style={styles.editInputsGroup}>
+                              <View style={styles.editInputWrapper}>
+                                <TextInput
+                                  style={styles.editInput}
+                                  value={editReps}
+                                  onChangeText={setEditReps}
+                                  keyboardType="numeric"
+                                  selectTextOnFocus
+                                  autoFocus
+                                  placeholder="0"
+                                  placeholderTextColor="#64748B"
+                                  returnKeyType="next"
+                                />
+                                <Text style={styles.editUnitText}>reps</Text>
+                              </View>
+                              <View style={styles.editInputWrapper}>
+                                <TextInput
+                                  style={styles.editInput}
+                                  value={editWeight}
+                                  onChangeText={setEditWeight}
+                                  keyboardType="decimal-pad"
+                                  selectTextOnFocus
+                                  placeholder="0"
+                                  placeholderTextColor="#64748B"
+                                  returnKeyType="done"
+                                  onSubmitEditing={handleSaveEdit}
+                                />
+                                <Text style={styles.editUnitText}>kg</Text>
+                              </View>
+                            </View>
+                            <View style={styles.editActions}>
+                              <TouchableOpacity style={styles.saveEditBtn} onPress={handleSaveEdit} activeOpacity={0.7}>
+                                <Check size={18} color="#0A0A0A" strokeWidth={3} />
+                              </TouchableOpacity>
+                              <TouchableOpacity style={styles.cancelEditBtn} onPress={handleCancelEdit} activeOpacity={0.7}>
+                                <X size={18} color="#94A3B8" />
+                              </TouchableOpacity>
+                            </View>
+                          </View>
+                        ) : (
+                          <TouchableOpacity
+                            style={styles.setInfo}
+                            onLongPress={() => handleStartEdit(set)}
+                            delayLongPress={350}
+                            activeOpacity={0.7}
+                          >
+                            <Text style={styles.setText}>{set.reps} reps</Text>
+                            <Text style={styles.weightText}>{set.weight} kg</Text>
+                          </TouchableOpacity>
+                        )}
+                      </View>
+                    );
+                  })}
+                </View>
+              </ScrollView>
 
-            {!editingSetId && (
-              <>
-                <View style={styles.playerBottom}>
+              {!editingSetId && (
+                <View style={[styles.playerBottom, { paddingBottom: Math.max(insets.bottom + 16, 36) }]}>
                   <View style={styles.progressContainer}>
                     <View style={styles.progressBarBg}>
                       <View
@@ -706,17 +756,26 @@ export default function WorkoutPlayer({
                   </View>
 
                   <View style={styles.mainControls}>
+                    <TouchableOpacity 
+                      style={styles.moreBtn} 
+                      onPress={onOptionsPress}
+                      activeOpacity={0.7}
+                      hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
+                    >
+                      <MoreHorizontal size={22} color="#94A3B8" />
+                    </TouchableOpacity>
+
                     <View style={styles.playControlsGroup}>
-                      <TouchableOpacity onPress={onPrevious}>
-                        <SkipBack size={36} color="#F8FAFC" fill="#F8FAFC" />
+                      <TouchableOpacity onPress={onPrevious} activeOpacity={0.7} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
+                        <SkipBack size={34} color="#F8FAFC" fill="#F8FAFC" />
                       </TouchableOpacity>
 
-                      <TouchableOpacity onPress={() => setIsWorkoutActive(!isWorkoutActive)} style={styles.playButton}>
-                        {isWorkoutActive ? <Pause size={48} color="#0A0A0A" /> : <Play size={48} color="#0A0A0A" fill="#0A0A0A" />}
+                      <TouchableOpacity onPress={() => setIsWorkoutActive(!isWorkoutActive)} style={styles.playButton} activeOpacity={0.8}>
+                        {isWorkoutActive ? <Pause size={44} color="#0A0A0A" /> : <Play size={44} color="#0A0A0A" fill="#0A0A0A" />}
                       </TouchableOpacity>
 
-                      <TouchableOpacity onPress={onNext}>
-                        <SkipForward size={36} color="#F8FAFC" fill="#F8FAFC" />
+                      <TouchableOpacity onPress={onNext} activeOpacity={0.7} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
+                        <SkipForward size={34} color="#F8FAFC" fill="#F8FAFC" />
                       </TouchableOpacity>
                     </View>
 
@@ -725,38 +784,48 @@ export default function WorkoutPlayer({
                       onPress={toggleRestTimer}
                       onLongPress={resetRestTimer}
                       delayLongPress={500}
+                      activeOpacity={0.7}
+                      hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
                     >
-                      <Timer size={28} color={restTimerActive ? "#A3E635" : "#F8FAFC"} />
+                      <Timer size={22} color={restTimerActive ? "#A3E635" : "#F8FAFC"} />
                     </TouchableOpacity>
                   </View>
                 </View>
-
-                <TouchableOpacity style={styles.moreBtn} onPress={onOptionsPress}>
-                  <MoreHorizontal size={24} color="#94A3B8" />
-                </TouchableOpacity>
-              </>
-            )}
-          </Animated.View>
-        </KeyboardAvoidingView>
-      </Modal>
+              )}
+            </Animated.View>
+          </KeyboardAvoidingView>
+        </View>
+      )}
     </>
   );
 }
 
 const styles = StyleSheet.create({
+  overlayRoot: {
+    ...StyleSheet.absoluteFillObject,
+    zIndex: 100,
+    elevation: 100,
+  },
   miniPlayer: {
     position: 'absolute',
-    bottom: 24,
-    left: 16,
-    right: 16,
-    backgroundColor: '#2D3039',
-    borderRadius: 16,
-    padding: 12,
+    bottom: 0,
+    left: 0,
+    right: 0,
+    backgroundColor: '#0A0A0A',
+    borderTopLeftRadius: 16,
+    borderTopRightRadius: 16,
+    borderBottomLeftRadius: 0,
+    borderBottomRightRadius: 0,
+    borderTopWidth: 1,
+    borderTopColor: '#27272A',
+    paddingHorizontal: 16,
+    paddingVertical: 12,
     shadowColor: '#000',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.3,
-    shadowRadius: 4,
-    elevation: 5,
+    shadowOffset: { width: 0, height: -3 },
+    shadowOpacity: 0.4,
+    shadowRadius: 6,
+    elevation: 8,
+    zIndex: 40,
   },
   miniPlayerContent: {
     flexDirection: 'row',
@@ -796,7 +865,7 @@ const styles = StyleSheet.create({
     backgroundColor: '#0A0A0A',
     borderTopLeftRadius: 24,
     borderTopRightRadius: 24,
-    marginTop: Platform.OS === 'ios' ? 48 : 40,
+    marginTop: Platform.OS === 'ios' ? 12 : 8,
     overflow: 'hidden',
     borderTopWidth: 1,
     borderTopColor: '#27272A',
@@ -820,10 +889,41 @@ const styles = StyleSheet.create({
     backgroundColor: '#3F3F46',
     borderRadius: 3,
   },
-  collapseButton: {
+  topHeaderRow: {
+    flexDirection: 'row',
     alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 16,
     paddingVertical: 2,
-    marginBottom: 2,
+    marginBottom: 4,
+  },
+  collapseButton: {
+    width: 36,
+    height: 36,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  workoutHeaderBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#1E2024',
+    borderWidth: 1,
+    borderColor: '#2D3039',
+    borderRadius: 20,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    gap: 6,
+    maxWidth: '72%',
+  },
+  workoutHeaderTitle: {
+    color: '#F8FAFC',
+    fontSize: 13,
+    fontWeight: '700',
+    flexShrink: 1,
+  },
+  headerRightSpacer: {
+    width: 36,
+    height: 36,
   },
   imageDragZone: {
     width: '100%',
@@ -988,12 +1088,12 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   playerBottom: {
-    paddingHorizontal: 24,
+    paddingHorizontal: 20,
     paddingTop: 8,
-    paddingBottom: 64, // Extra space at bottom to prevent overlap with moreBtn
+    paddingBottom: 24,
   },
   progressContainer: {
-    marginBottom: 24,
+    marginBottom: 16,
   },
   progressBarBg: {
     height: 4,
@@ -1014,36 +1114,40 @@ const styles = StyleSheet.create({
   mainControls: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'center',
-    position: 'relative',
-    marginTop: 16,
+    justifyContent: 'space-between',
+    marginTop: 10,
+    paddingHorizontal: 4,
   },
   playControlsGroup: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 40,
+    gap: 28,
   },
   timerBtn: {
-    position: 'absolute',
-    right: 0,
-    padding: 8,
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    backgroundColor: '#1E2024',
+    borderWidth: 1,
+    borderColor: '#2D3039',
+    justifyContent: 'center',
+    alignItems: 'center',
   },
   playButton: {
     backgroundColor: '#F8FAFC',
-    width: 80,
-    height: 80,
-    borderRadius: 40,
+    width: 72,
+    height: 72,
+    borderRadius: 36,
     justifyContent: 'center',
     alignItems: 'center',
   },
   moreBtn: {
-    position: 'absolute',
-    bottom: 24,
-    right: 24,
-    width: 48,
-    height: 48,
-    borderRadius: 24,
-    backgroundColor: '#27272A',
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    backgroundColor: '#1E2024',
+    borderWidth: 1,
+    borderColor: '#2D3039',
     justifyContent: 'center',
     alignItems: 'center',
   }

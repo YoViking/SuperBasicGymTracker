@@ -3,6 +3,7 @@ import { Platform } from 'react-native';
 import { supabase } from '../lib/supabase';
 import { findBestExerciseMatch } from './exerciseMatcher';
 import { ExerciseLibrary } from '../types';
+import { cacheService } from './cacheService';
 
 // Types for the generated AI program
 export interface GeneratedExercise {
@@ -267,29 +268,99 @@ function parseReps(repsStr: string | number): number {
 }
 
 /**
+ * Checks if a user already has a folder/program with the same name.
+ */
+export async function checkExistingProgram(
+  programName: string,
+  userId: string
+): Promise<{ exists: boolean; existingFolderId?: string; existingFolderName?: string }> {
+  if (!userId || !programName) return { exists: false };
+
+  try {
+    const { data: existingFolder } = await supabase
+      .from('folders')
+      .select('id, name')
+      .eq('user_id', userId)
+      .ilike('name', programName.trim())
+      .maybeSingle();
+
+    if (existingFolder) {
+      return {
+        exists: true,
+        existingFolderId: existingFolder.id,
+        existingFolderName: existingFolder.name
+      };
+    }
+
+    return { exists: false };
+  } catch (err) {
+    console.error('Error checking existing program:', err);
+    return { exists: false };
+  }
+}
+
+/**
  * Saves a matched program to Supabase as a folder, workouts, and workout_exercises.
+ * If overwriteFolderId is provided, it replaces the workouts & exercises in that existing folder.
  * Returns the folder/program ID.
  */
 export async function saveProgramToDatabase(
   matchedProgram: MatchedProgram,
-  userId: string
+  userId: string,
+  overwriteFolderId?: string
 ): Promise<string> {
   if (!userId) throw new Error('User must be logged in to save a program.');
 
   try {
-    // 1. Create the Folder (represents the overall program)
-    const { data: folder, error: folderError } = await supabase
-      .from('folders')
-      .insert([{
-        name: matchedProgram.programName,
-        description: matchedProgram.description,
-        user_id: userId
-      }])
-      .select()
-      .single();
+    let folderId: string;
 
-    if (folderError || !folder) {
-      throw new Error(`Failed to create program folder: ${folderError?.message}`);
+    if (overwriteFolderId) {
+      folderId = overwriteFolderId;
+      // 1a. Overwrite existing program: find and delete existing workouts under this folder
+      const { data: oldWorkouts } = await supabase
+        .from('workouts')
+        .select('id')
+        .eq('folder_id', folderId);
+
+      if (oldWorkouts && oldWorkouts.length > 0) {
+        const oldWorkoutIds = oldWorkouts.map(w => w.id);
+        // Delete all exercises for these workouts
+        await supabase
+          .from('workout_exercises')
+          .delete()
+          .in('workout_id', oldWorkoutIds);
+
+        // Delete old workouts
+        await supabase
+          .from('workouts')
+          .delete()
+          .in('id', oldWorkoutIds);
+      }
+
+      // Update folder name/description
+      await supabase
+        .from('folders')
+        .update({
+          name: matchedProgram.programName,
+          description: matchedProgram.description
+        })
+        .eq('id', folderId);
+    } else {
+      // 1b. Create the Folder (represents the overall program)
+      const { data: folder, error: folderError } = await supabase
+        .from('folders')
+        .insert([{
+          name: matchedProgram.programName,
+          description: matchedProgram.description,
+          user_id: userId
+        }])
+        .select()
+        .single();
+
+      if (folderError || !folder) {
+        throw new Error(`Failed to create program folder: ${folderError?.message}`);
+      }
+      folderId = folder.id;
     }
 
     // 2. Insert workouts and workout exercises sequentially
@@ -299,7 +370,7 @@ export async function saveProgramToDatabase(
         .from('workouts')
         .insert([{
           name: w.dayName,
-          folder_id: folder.id,
+          folder_id: folderId,
           user_id: userId
         }])
         .select()
@@ -344,7 +415,10 @@ export async function saveProgramToDatabase(
       }
     }
 
-    return folder.id;
+    // Invalidate cache so workouts & folders reload cleanly
+    cacheService.invalidate('workouts', userId);
+
+    return folderId;
   } catch (error) {
     console.error('Error saving program:', error);
     throw error;

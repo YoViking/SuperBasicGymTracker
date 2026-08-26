@@ -5,6 +5,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { ArrowLeft, Plus, Minus } from 'lucide-react-native';
 import { supabase } from '../../../../src/lib/supabase';
 import ExerciseStats from '../../../../src/components/statistics/ExerciseStats';
+import { useWorkoutSession } from '../../../../src/context/WorkoutSessionContext';
 
 const { width } = Dimensions.get('window');
 
@@ -18,6 +19,7 @@ interface ExerciseSet {
 export default function WorkoutExerciseDetailScreen() {
   const { workoutId, exerciseId } = useLocalSearchParams<{ workoutId: string, exerciseId: string }>();
   const router = useRouter();
+  const { activeWorkout, groupedExercises, refreshWorkoutExercises } = useWorkoutSession();
 
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -31,6 +33,7 @@ export default function WorkoutExerciseDetailScreen() {
   
   const [setsData, setSetsData] = useState<ExerciseSet[]>([]);
   const [deletedSets, setDeletedSets] = useState<string[]>([]);
+  const [orderIndex, setOrderIndex] = useState<number>(0);
   
   const [customName, setCustomName] = useState('');
   const [originalName, setOriginalName] = useState('');
@@ -61,18 +64,26 @@ export default function WorkoutExerciseDetailScreen() {
       if (data && data.length > 0) {
         // Sort explicitly by sets number
         const sortedData = data.sort((a, b) => a.sets - b.sets);
+        setOrderIndex(sortedData[0].order_index ?? 0);
         
         setOriginalName(data[0].exercise.name);
         setExternalLink(data[0].exercise.link || '');
-        setCustomName(data[0].custom_name || data[0].exercise.name);
         setNotes(data[0].notes || '');
+
+        const isSessionActive = activeWorkout && activeWorkout.id === workoutId;
+        const sessionGroup = isSessionActive ? groupedExercises.find(g => g.exerciseId === exerciseId) : null;
         
-        setSetsData(sortedData.map(row => ({
-          id: row.id,
-          reps: row.reps.toString(),
-          weight: row.weight.toString(),
-          is_done: row.is_done
-        })));
+        setCustomName(sessionGroup?.sets[0]?.custom_name || data[0].custom_name || data[0].exercise.name);
+        
+        setSetsData(sortedData.map(row => {
+          const sessionSet = sessionGroup?.sets.find(s => s.id === row.id);
+          return {
+            id: row.id,
+            reps: sessionSet ? sessionSet.reps.toString() : row.reps.toString(),
+            weight: sessionSet ? sessionSet.weight.toString() : row.weight.toString(),
+            is_done: sessionSet ? sessionSet.is_done : row.is_done
+          };
+        }));
       }
 
     } catch (error) {
@@ -135,7 +146,8 @@ export default function WorkoutExerciseDetailScreen() {
           weight: parseFloat(set.weight) || 0,
           custom_name: customName.trim() ? customName.trim() : null,
           notes: notes.trim() ? notes.trim() : null,
-          is_done: set.is_done
+          is_done: set.is_done,
+          order_index: orderIndex
         };
 
         if (set.id.startsWith('tmp-')) {
@@ -145,6 +157,10 @@ export default function WorkoutExerciseDetailScreen() {
           const { error } = await supabase.from('workout_exercises').update(payload).eq('id', set.id);
           if (error) throw error;
         }
+      }
+
+      if (activeWorkout && activeWorkout.id === workoutId) {
+        await refreshWorkoutExercises(workoutId);
       }
 
       showToast('Sparad');
