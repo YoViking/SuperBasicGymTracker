@@ -320,7 +320,8 @@ export async function saveProgramToDatabase(
       const { data: oldWorkouts } = await supabase
         .from('workouts')
         .select('id')
-        .eq('folder_id', folderId);
+        .eq('folder_id', folderId)
+        .eq('user_id', userId);
 
       if (oldWorkouts && oldWorkouts.length > 0) {
         const oldWorkoutIds = oldWorkouts.map(w => w.id);
@@ -334,7 +335,8 @@ export async function saveProgramToDatabase(
         await supabase
           .from('workouts')
           .delete()
-          .in('id', oldWorkoutIds);
+          .in('id', oldWorkoutIds)
+          .eq('user_id', userId);
       }
 
       // Update folder name/description

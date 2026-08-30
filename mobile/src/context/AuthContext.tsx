@@ -2,6 +2,7 @@ import React, { createContext, useContext, useEffect, useState } from 'react';
 import { Session, User } from '@supabase/supabase-js';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { supabase } from '../services/supabase';
+import { cacheService } from '../services/cacheService';
 
 interface AuthContextType {
   session: Session | null;
@@ -32,9 +33,12 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
     checkSession();
 
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, activeSession) => {
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (_event, activeSession) => {
       setSession(activeSession);
       setUser(activeSession?.user || null);
+      if (_event === 'SIGNED_OUT') {
+        await cacheService.clearAll();
+      }
     });
 
     return () => {
@@ -45,6 +49,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const signOut = async () => {
     setLoading(true);
     try {
+      await cacheService.clearAll();
       await supabase.auth.signOut();
       setSession(null);
       setUser(null);

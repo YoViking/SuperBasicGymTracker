@@ -36,8 +36,10 @@ export default function SavedWorkouts() {
         // Fast in-memory cache check
         const memCached = cacheService.get<{ workouts: Workout[]; folders: Folder[] }>('workouts', userId);
         if (memCached) {
-          setWorkouts(memCached.workouts);
-          setFolders(memCached.folders);
+          const validWorkouts = (memCached.workouts || []).filter(w => w.user_id === userId);
+          const validFolders = (memCached.folders || []).filter(f => f.user_id === userId);
+          setWorkouts(validWorkouts);
+          setFolders(validFolders);
           setLoading(false);
           return;
         }
@@ -45,8 +47,10 @@ export default function SavedWorkouts() {
         // Async storage check
         const asyncCached = await cacheService.getAsync<{ workouts: Workout[]; folders: Folder[] }>('workouts', userId);
         if (asyncCached) {
-          setWorkouts(asyncCached.workouts);
-          setFolders(asyncCached.folders);
+          const validWorkouts = (asyncCached.workouts || []).filter(w => w.user_id === userId);
+          const validFolders = (asyncCached.folders || []).filter(f => f.user_id === userId);
+          setWorkouts(validWorkouts);
+          setFolders(validFolders);
           setLoading(false);
           return;
         }
@@ -59,21 +63,27 @@ export default function SavedWorkouts() {
       }
       
       let foldersData: Folder[] = [];
-      // Fetch folders if user exists
-      if (user) {
-        const { data: fData, error: foldersError } = await supabase
-          .from('folders')
-          .select('*')
-          .eq('user_id', user.id)
-          .order('created_at', { ascending: false });
-          
-        if (!foldersError && fData) {
-          foldersData = fData;
-          setFolders(fData);
-        }
+      if (!user) {
+        setWorkouts([]);
+        setFolders([]);
+        setLoading(false);
+        setRefreshing(false);
+        return;
       }
 
-      // Fetch active workouts with their exercise_library info
+      // Fetch folders for user
+      const { data: fData, error: foldersError } = await supabase
+        .from('folders')
+        .select('*')
+        .eq('user_id', user.id)
+        .order('created_at', { ascending: false });
+        
+      if (!foldersError && fData) {
+        foldersData = fData;
+        setFolders(fData);
+      }
+
+      // Fetch active workouts for user with their exercise_library info
       const { data: workoutsData, error: workoutsError } = await supabase
         .from('workouts')
         .select(`
@@ -87,6 +97,7 @@ export default function SavedWorkouts() {
             )
           )
         `)
+        .eq('user_id', user.id)
         .or('is_deleted.is.null,is_deleted.eq.false')
         .order('created_at', { ascending: false });
 
@@ -138,10 +149,17 @@ export default function SavedWorkouts() {
   const handleDelete = async () => {
     if (!selectedWorkout) return;
     try {
-      const { error } = await supabase
+      const { data: { user } } = await supabase.auth.getUser();
+      let query = supabase
         .from('workouts')
         .update({ is_deleted: true })
         .eq('id', selectedWorkout.id);
+
+      if (user) {
+        query = query.eq('user_id', user.id);
+      }
+
+      const { error } = await query;
       
       if (error) throw error;
       setWorkouts(prev => prev.filter(w => w.id !== selectedWorkout.id));
@@ -165,10 +183,17 @@ export default function SavedWorkouts() {
   const handleMoveToFolder = async (folderId: string | null) => {
     if (!selectedWorkout) return;
     try {
-      const { error } = await supabase
+      const { data: { user } } = await supabase.auth.getUser();
+      let query = supabase
         .from('workouts')
         .update({ folder_id: folderId })
         .eq('id', selectedWorkout.id);
+
+      if (user) {
+        query = query.eq('user_id', user.id);
+      }
+
+      const { error } = await query;
         
       if (error) throw error;
       

@@ -42,14 +42,19 @@ export default function FolderScreen() {
       setLoading(true);
       const { data: { user } } = await supabase.auth.getUser();
 
-      if (user) {
-        const { data: foldersData } = await supabase
-          .from('folders')
-          .select('*')
-          .eq('user_id', user.id)
-          .order('created_at', { ascending: false });
-        if (foldersData) setFolders(foldersData);
+      if (!user) {
+        setWorkouts([]);
+        setFolders([]);
+        setLoading(false);
+        return;
       }
+
+      const { data: foldersData } = await supabase
+        .from('folders')
+        .select('*')
+        .eq('user_id', user.id)
+        .order('created_at', { ascending: false });
+      if (foldersData) setFolders(foldersData);
 
       const { data, error } = await supabase
         .from('workouts')
@@ -64,6 +69,7 @@ export default function FolderScreen() {
             )
           )
         `)
+        .eq('user_id', user.id)
         .or('is_deleted.is.null,is_deleted.eq.false')
         .eq('folder_id', folderId)
         .order('created_at', { ascending: false });
@@ -90,10 +96,17 @@ export default function FolderScreen() {
   const handleDelete = async () => {
     if (!selectedWorkout) return;
     try {
-      const { error } = await supabase
+      const { data: { user } } = await supabase.auth.getUser();
+      let query = supabase
         .from('workouts')
         .update({ is_deleted: true })
         .eq('id', selectedWorkout.id);
+
+      if (user) {
+        query = query.eq('user_id', user.id);
+      }
+
+      const { error } = await query;
       
       if (error) throw error;
       setWorkouts(prev => prev.filter(w => w.id !== selectedWorkout.id));
@@ -113,10 +126,17 @@ export default function FolderScreen() {
   const handleMoveToFolder = async (newFolderId: string) => {
     if (!selectedWorkout) return;
     try {
-      const { error } = await supabase
+      const { data: { user } } = await supabase.auth.getUser();
+      let query = supabase
         .from('workouts')
         .update({ folder_id: newFolderId })
         .eq('id', selectedWorkout.id);
+
+      if (user) {
+        query = query.eq('user_id', user.id);
+      }
+
+      const { error } = await query;
       
       if (error) throw error;
       
@@ -202,10 +222,16 @@ export default function FolderScreen() {
         }
       }
 
-      const { error } = await supabase
+      let query = supabase
         .from('folders')
         .update({ name: newName, description: newDescription, image_url })
         .eq('id', folderId);
+
+      if (user) {
+        query = query.eq('user_id', user.id);
+      }
+
+      const { error } = await query;
 
       if (error) throw error;
 
@@ -222,19 +248,32 @@ export default function FolderScreen() {
   const handleDeleteFolder = async () => {
     if (!folderId) return;
     try {
+      const { data: { user } } = await supabase.auth.getUser();
       // 1. Update workouts to disassociate them from this folder
-      const { error: workoutsError } = await supabase
+      let workoutsQuery = supabase
         .from('workouts')
         .update({ folder_id: null })
         .eq('folder_id', folderId);
 
+      if (user) {
+        workoutsQuery = workoutsQuery.eq('user_id', user.id);
+      }
+
+      const { error: workoutsError } = await workoutsQuery;
+
       if (workoutsError) throw workoutsError;
 
       // 2. Delete the folder from folders table
-      const { error: folderError } = await supabase
+      let folderQuery = supabase
         .from('folders')
         .delete()
         .eq('id', folderId);
+
+      if (user) {
+        folderQuery = folderQuery.eq('user_id', user.id);
+      }
+
+      const { error: folderError } = await folderQuery;
 
       if (folderError) throw folderError;
 

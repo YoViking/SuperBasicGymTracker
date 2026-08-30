@@ -121,6 +121,7 @@ export function useHomeData() {
               )
             `)
             .in('id', recentLogWorkoutIds.slice(0, 2))
+            .eq('user_id', user.id)
             .or('is_deleted.is.null,is_deleted.eq.false');
 
           if (!workoutsErr && workoutsData) {

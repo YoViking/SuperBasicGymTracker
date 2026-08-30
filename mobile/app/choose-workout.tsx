@@ -32,6 +32,7 @@ export default function ChooseWorkoutScreen() {
         .from('workouts')
         .select('*')
         .eq('user_id', user.id)
+        .or('is_deleted.is.null,is_deleted.eq.false')
         .order('created_at', { ascending: false });
 
       if (error) throw error;

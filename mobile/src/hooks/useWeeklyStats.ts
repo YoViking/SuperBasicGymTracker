@@ -80,6 +80,7 @@ export function useWeeklyStats() {
           .from('workouts')
           .select('folder_id')
           .eq('id', recentLogs[0].workout_id)
+          .eq('user_id', user.id)
           .maybeSingle();
 
         if (workoutData && workoutData.folder_id) {
