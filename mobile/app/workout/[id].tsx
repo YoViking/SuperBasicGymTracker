@@ -270,6 +270,7 @@ export default function WorkoutDetailScreen() {
     }
 
     const handleFinish = () => {
+      if (sessionSaving) return;
       if (!isCurrentActiveWorkout && localWorkout && displayGroupedExercises.length > 0) {
         startWorkout(localWorkout, displayGroupedExercises);
       }
@@ -278,8 +279,15 @@ export default function WorkoutDetailScreen() {
 
     return (
       <View style={styles.footerContainer}>
-        <TouchableOpacity style={styles.finishButton} onPress={handleFinish} activeOpacity={0.8}>
-          <Text style={styles.finishButtonText}>Slutför Workout</Text>
+        <TouchableOpacity 
+          style={[styles.finishButton, sessionSaving && { opacity: 0.6 }]} 
+          onPress={handleFinish} 
+          disabled={sessionSaving}
+          activeOpacity={0.8}
+        >
+          <Text style={styles.finishButtonText}>
+            {sessionSaving ? 'Sparar...' : 'Slutför Workout'}
+          </Text>
         </TouchableOpacity>
       </View>
     );

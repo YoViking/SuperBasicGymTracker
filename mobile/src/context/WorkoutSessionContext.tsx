@@ -362,9 +362,12 @@ export function WorkoutSessionProvider({ children }: { children: React.ReactNode
     }
   }, [optionsWorkoutId, activeWorkout, optionsExerciseId, activeExerciseId, groupedExercises, closeExerciseOptions]);
 
+  const isSavingRef = useRef(false);
+
   const finishWorkout = useCallback(async () => {
-    if (!activeWorkout) return;
+    if (isSavingRef.current || !activeWorkout) return;
     try {
+      isSavingRef.current = true;
       setIsSaving(true);
       setIsWorkoutActive(false);
 
@@ -438,25 +441,6 @@ export function WorkoutSessionProvider({ children }: { children: React.ReactNode
           .insert(insertData);
           
         if (exError) throw exError;
-
-        for (const log of exerciseLogs) {
-          try {
-            const { data: exData } = await supabase
-              .from('exercise_library')
-              .select('id, completions_count')
-              .eq('name', log.exercise_name)
-              .maybeSingle();
-
-            if (exData) {
-              await supabase
-                .from('exercise_library')
-                .update({ completions_count: (exData.completions_count || 0) + 1 })
-                .eq('id', exData.id);
-            }
-          } catch (e) {
-            console.log('Error updating completions_count:', e);
-          }
-        }
       }
 
       setSummaryData({
@@ -473,14 +457,15 @@ export function WorkoutSessionProvider({ children }: { children: React.ReactNode
 
       setIsPlayerExpanded(false);
       setOptionsModalVisible(false);
-      setIsSaving(false);
       setSummaryModalVisible(true);
     } catch (error: any) {
       console.error('Error saving workout:', error);
       if (Platform.OS === 'android') {
         ToastAndroid.show(`Kunde inte spara: ${error.message || 'Ett fel inträffade'}`, ToastAndroid.LONG);
       }
+    } finally {
       setIsSaving(false);
+      isSavingRef.current = false;
     }
   }, [activeWorkout, groupedExercises, workoutTimeElapsed]);
 
