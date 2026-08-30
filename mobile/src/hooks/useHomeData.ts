@@ -292,18 +292,6 @@ export function useHomeData() {
         }
         const randomIndex = charSum % exercisesData.length;
         dailyExercise = exercisesData[randomIndex];
-
-        if (dailyExercise) {
-          const { count } = await supabase
-            .from('workout_exercise_logs')
-            .select('*', { count: 'exact', head: true })
-            .eq('exercise_name', dailyExercise.name);
-
-          dailyExercise = {
-            ...dailyExercise,
-            completions_count: Math.max(dailyExercise.completions_count || 0, count || 0),
-          };
-        }
       }
 
       const result: Omit<HomeData, 'loading'> = {

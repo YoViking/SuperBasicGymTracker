@@ -63,30 +63,7 @@ export default function TopExercisesScreen() {
         return;
       }
 
-      // Fetch count from workout_exercise_logs to ensure historical counts are included
-      const { data: logsData } = await supabase
-        .from('workout_exercise_logs')
-        .select('exercise_name');
-
-      const logCounts = new Map<string, number>();
-      if (logsData) {
-        logsData.forEach((log: any) => {
-          if (log.exercise_name) {
-            logCounts.set(log.exercise_name, (logCounts.get(log.exercise_name) || 0) + 1);
-          }
-        });
-      }
-
-      const merged = (data || []).map((ex: Exercise) => {
-        const loggedCount = logCounts.get(ex.name) || 0;
-        const colCount = ex.completions_count || 0;
-        return {
-          ...ex,
-          completions_count: Math.max(colCount, loggedCount),
-        };
-      });
-
-      setExercises(merged);
+      setExercises(data || []);
     } catch (error) {
       console.error('Error in fetchTopExercises:', error);
     } finally {
