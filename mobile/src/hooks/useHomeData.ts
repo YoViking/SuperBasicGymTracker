@@ -3,12 +3,13 @@ import { supabase } from '../lib/supabase';
 import { useFocusEffect } from 'expo-router';
 import { Workout, Folder, ExerciseLibrary } from '../types';
 import { cacheService } from '../services/cacheService';
+import { isTimedExercise, isBodyweightExercise } from '../utils/volume';
 
 export interface PersonalBestAchievement {
   exerciseName: string;
   currentWeight: number;
   increase: number;
-  type?: 'max_weight' | 'max_reps';
+  type?: 'max_weight' | 'max_reps' | 'max_time';
   reps?: number;
   unit: string;
   achievedAt: string;
@@ -211,12 +212,15 @@ export function useHomeData() {
             workout_logs!inner(created_at, user_id)
           `)
           .eq('workout_logs.user_id', user.id)
-          .gt('weight', 0)
           .order('workout_logs(created_at)', { ascending: true });
 
         if (!logsErr && logsData) {
           // Track highest weight and reps achieved up to each workout session
-          const historyMap = new Map<string, { maxWeight: number; maxRepsAtMax: number }>();
+          const historyMap = new Map<string, {
+            maxWeight: number;
+            maxRepsAtMax: number;
+            maxRepsAtWeight: Map<number, number>;
+          }>();
           const allPBEvents: PersonalBestAchievement[] = [];
 
           logsData.forEach((log: any) => {
@@ -224,16 +228,30 @@ export function useHomeData() {
             const weight = Number(log.weight) || 0;
             const reps = Number(log.reps) || 0;
             const createdAt = log.workout_logs?.created_at;
-            if (!name || weight <= 0 || !createdAt) return;
+            if (!name || (weight <= 0 && reps <= 0) || !createdAt) return;
+
+            const isTimed = isTimedExercise(name);
+            const isBodyweight = isBodyweightExercise(name);
 
             const existing = historyMap.get(name);
             if (!existing) {
               // Baseline establishment for this exercise
-              historyMap.set(name, { maxWeight: weight, maxRepsAtMax: reps });
+              const repsMap = new Map<number, number>();
+              repsMap.set(weight, reps);
+              historyMap.set(name, {
+                maxWeight: weight,
+                maxRepsAtMax: reps,
+                maxRepsAtWeight: repsMap,
+              });
             } else {
+              const prevRepsAtCurrentWeight = existing.maxRepsAtWeight.get(weight) || 0;
+
               if (weight > existing.maxWeight) {
                 // Strict Max Weight PB!
-                const increase = Number((weight - existing.maxWeight).toFixed(1));
+                const increase = existing.maxWeight > 0
+                  ? Number((weight - existing.maxWeight).toFixed(1))
+                  : weight;
+
                 allPBEvents.push({
                   exerciseName: name,
                   currentWeight: weight,
@@ -243,21 +261,46 @@ export function useHomeData() {
                   achievedAt: createdAt,
                   dateDisplay: formatRecordDate(createdAt),
                 });
-                historyMap.set(name, { maxWeight: weight, maxRepsAtMax: reps });
+                existing.maxWeight = weight;
+                existing.maxRepsAtMax = reps;
+                existing.maxRepsAtWeight.set(weight, reps);
               } else if (weight === existing.maxWeight && reps > existing.maxRepsAtMax && existing.maxRepsAtMax > 0) {
-                // Reps PB at same max weight!
+                // Reps / Time PB at max weight!
                 const increase = reps - existing.maxRepsAtMax;
+                const pType = isTimed ? 'max_time' : 'max_reps';
+                const pUnit = isTimed ? 'sek' : 'reps';
+
                 allPBEvents.push({
                   exerciseName: name,
                   currentWeight: weight,
                   increase,
                   reps,
-                  type: 'max_reps',
-                  unit: 'reps',
+                  type: pType,
+                  unit: pUnit,
                   achievedAt: createdAt,
                   dateDisplay: formatRecordDate(createdAt),
                 });
-                historyMap.set(name, { maxWeight: weight, maxRepsAtMax: reps });
+                existing.maxRepsAtMax = reps;
+                existing.maxRepsAtWeight.set(weight, reps);
+              } else if (weight === 0 && reps > prevRepsAtCurrentWeight && prevRepsAtCurrentWeight > 0) {
+                // Bodyweight Reps / Time PB (even if previously done weighted)
+                const increase = reps - prevRepsAtCurrentWeight;
+                const pType = isTimed ? 'max_time' : 'max_reps';
+                const pUnit = isTimed ? 'sek' : 'reps';
+
+                allPBEvents.push({
+                  exerciseName: name,
+                  currentWeight: 0,
+                  increase,
+                  reps,
+                  type: pType,
+                  unit: pUnit,
+                  achievedAt: createdAt,
+                  dateDisplay: formatRecordDate(createdAt),
+                });
+                existing.maxRepsAtWeight.set(0, reps);
+              } else if (reps > prevRepsAtCurrentWeight) {
+                existing.maxRepsAtWeight.set(weight, reps);
               }
             }
           });

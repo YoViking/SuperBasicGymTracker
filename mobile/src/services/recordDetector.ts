@@ -1,9 +1,10 @@
 import { supabase } from '../lib/supabase';
+import { isTimedExercise, isBodyweightExercise } from '../utils/volume';
 
 export interface ExerciseAchievement {
   exerciseName: string;
   muscleGroup?: string;
-  type: 'max_weight' | 'max_reps';
+  type: 'max_weight' | 'max_reps' | 'max_time';
   title: string;
   currentValue: number;
   previousValue?: number;
@@ -28,9 +29,9 @@ export interface CompletedExerciseData {
  * Compares the completed exercises in the current session against the user's
  * historical workout_exercise_logs to detect genuine new personal records (PRs).
  * 
- * Only awards a PR if:
+ * Detects:
  * 1. Max Weight Record: The user lifted a strictly heavier weight than in any past log.
- * 2. Reps Record at Max Weight: The user performed strictly more reps on their previous max weight.
+ * 2. Reps / Time Record: The user performed strictly more reps (or seconds) at their max weight / bodyweight.
  */
 export async function detectWorkoutRecords(
   userId: string,
@@ -42,6 +43,9 @@ export async function detectWorkoutRecords(
     for (const ex of exercises) {
       const doneSets = ex.sets.filter(s => s.is_done && s.reps > 0);
       if (doneSets.length === 0) continue;
+
+      const isTimed = isTimedExercise(ex.exerciseName);
+      const isBodyweight = isBodyweightExercise(ex.exerciseName);
 
       // Current session max weight and max reps at that max weight
       const currentMaxWeight = Math.max(...doneSets.map(s => s.weight || 0));
@@ -82,37 +86,71 @@ export async function detectWorkoutRecords(
         : 0;
 
       // 1. Check for Strict Max Weight PB (strictly heavier weight)
-      if (currentMaxWeight > pastMaxWeight && pastMaxWeight > 0) {
-        const diff = Number((currentMaxWeight - pastMaxWeight).toFixed(1));
+      if (currentMaxWeight > pastMaxWeight) {
+        const diff = pastMaxWeight > 0
+          ? Number((currentMaxWeight - pastMaxWeight).toFixed(1))
+          : currentMaxWeight;
+
         achievements.push({
           exerciseName: ex.exerciseName,
           muscleGroup: ex.muscleGroup,
           type: 'max_weight',
-          title: 'Nytt Maxvikt PB',
+          title: isBodyweight && pastMaxWeight === 0
+            ? `Nytt Vikt-PB (+${currentMaxWeight} kg)`
+            : 'Nytt Maxvikt PB',
           currentValue: currentMaxWeight,
-          previousValue: pastMaxWeight,
+          previousValue: pastMaxWeight > 0 ? pastMaxWeight : undefined,
           diff: diff > 0 ? diff : undefined,
           unit: 'kg',
         });
-      } else if (
-        currentMaxWeight === pastMaxWeight &&
-        pastMaxWeight > 0 &&
-        currentMaxRepsAtMaxWeight > pastMaxRepsAtCurrentWeight &&
-        pastMaxRepsAtCurrentWeight > 0
-      ) {
-        // 2. Check for Reps Record at same max weight (more reps on previous max weight)
-        const diff = currentMaxRepsAtMaxWeight - pastMaxRepsAtCurrentWeight;
-        achievements.push({
-          exerciseName: ex.exerciseName,
-          muscleGroup: ex.muscleGroup,
-          type: 'max_reps',
-          title: `Nytt Reps-rekord (${currentMaxWeight} kg)`,
-          currentValue: currentMaxRepsAtMaxWeight,
-          previousValue: pastMaxRepsAtCurrentWeight,
-          diff: diff > 0 ? diff : undefined,
-          unit: 'reps',
-          weightContext: currentMaxWeight,
-        });
+      } else if (currentMaxWeight === pastMaxWeight) {
+        // 2. Check for Reps / Time Record at same max weight / bodyweight
+        if (currentMaxRepsAtMaxWeight > pastMaxRepsAtCurrentWeight && pastMaxRepsAtCurrentWeight > 0) {
+          const diff = currentMaxRepsAtMaxWeight - pastMaxRepsAtCurrentWeight;
+          const achievementType = isTimed ? 'max_time' : 'max_reps';
+          const unit = isTimed ? 'sek' : 'reps';
+
+          let title = 'Nytt Reps-rekord';
+          if (isTimed) {
+            title = currentMaxWeight > 0 ? `Nytt Tidsrekord (${currentMaxWeight} kg)` : 'Nytt Tidsrekord';
+          } else if (isBodyweight && currentMaxWeight === 0) {
+            title = 'Nytt Reps-rekord (kroppsvikt)';
+          } else if (currentMaxWeight > 0) {
+            title = `Nytt Reps-rekord (${currentMaxWeight} kg)`;
+          }
+
+          achievements.push({
+            exerciseName: ex.exerciseName,
+            muscleGroup: ex.muscleGroup,
+            type: achievementType,
+            title,
+            currentValue: currentMaxRepsAtMaxWeight,
+            previousValue: pastMaxRepsAtCurrentWeight,
+            diff: diff > 0 ? diff : undefined,
+            unit,
+            weightContext: currentMaxWeight,
+          });
+        }
+      } else if (currentMaxWeight < pastMaxWeight && currentMaxWeight === 0) {
+        // 3. Check for bodyweight reps/time PB even if previously done weighted
+        if (currentMaxRepsAtMaxWeight > pastMaxRepsAtCurrentWeight && pastMaxRepsAtCurrentWeight > 0) {
+          const diff = currentMaxRepsAtMaxWeight - pastMaxRepsAtCurrentWeight;
+          const achievementType = isTimed ? 'max_time' : 'max_reps';
+          const unit = isTimed ? 'sek' : 'reps';
+          const title = isTimed ? 'Nytt Tidsrekord' : 'Nytt Reps-rekord (kroppsvikt)';
+
+          achievements.push({
+            exerciseName: ex.exerciseName,
+            muscleGroup: ex.muscleGroup,
+            type: achievementType,
+            title,
+            currentValue: currentMaxRepsAtMaxWeight,
+            previousValue: pastMaxRepsAtCurrentWeight,
+            diff: diff > 0 ? diff : undefined,
+            unit,
+            weightContext: 0,
+          });
+        }
       }
     }
   } catch (err) {
