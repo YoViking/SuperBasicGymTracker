@@ -1,8 +1,9 @@
 import React from 'react';
-import { View, StyleSheet, TouchableOpacity, Platform } from 'react-native';
+import { View, StyleSheet, TouchableOpacity } from 'react-native';
 import { useRouter } from 'expo-router';
 import { Home, Dumbbell, Search, User } from 'lucide-react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { getBottomNavLayout } from '../utils/layout';
 
 interface AppBottomNavProps {
   activeTab?: 'index' | 'workouts' | 'exercises' | 'user';
@@ -16,11 +17,10 @@ export default function AppBottomNav({ activeTab = 'workouts' }: AppBottomNavPro
     router.replace(route as any);
   };
 
-  const navHeight = Platform.OS === 'ios' ? 90 : 74;
-  const paddingBottom = Platform.OS === 'ios' ? 28 : 14;
+  const { height: navHeight, bottomPadding } = getBottomNavLayout(insets.bottom);
 
   return (
-    <View style={[styles.container, { height: navHeight, paddingBottom }]}>
+    <View style={[styles.container, { height: navHeight, paddingBottom: bottomPadding }]}>
       <TouchableOpacity
         style={styles.tabItem}
         onPress={() => handleNavigate('/(tabs)')}

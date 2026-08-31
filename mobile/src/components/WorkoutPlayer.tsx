@@ -24,6 +24,7 @@ import * as Notifications from 'expo-notifications';
 import { activateKeepAwakeAsync, deactivateKeepAwake } from 'expo-keep-awake';
 import { getMuscleGroupImage } from '../utils/images';
 import { getRestTimerInterval, getKeepAwakeSetting } from '../utils/settings';
+import { getBottomNavLayout } from '../utils/layout';
 
 Notifications.setNotificationHandler({
   handleNotification: async () => ({
@@ -78,7 +79,7 @@ export default function WorkoutPlayer({
 }: WorkoutPlayerProps) {
   const insets = useSafeAreaInsets();
   const topSheetMargin = Math.max(insets.top + 8, Platform.OS === 'ios' ? 54 : 36);
-  const defaultNavHeight = Platform.OS === 'ios' ? 90 : 74;
+  const { height: defaultNavHeight } = getBottomNavLayout(insets.bottom);
   const navHeight = bottomNavHeight ?? (hasBottomNav ? defaultNavHeight : 0);
   const exerciseDisplayName = activeExercise?.sets?.[0]?.custom_name || activeExercise?.exerciseName || '';
 
