@@ -4,6 +4,7 @@ import { useSegments, useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Dumbbell, Repeat, Trash2, CheckCircle2, XCircle } from 'lucide-react-native';
 import { useWorkoutSession } from '../context/WorkoutSessionContext';
+import { getBottomNavLayout } from '../utils/layout';
 import WorkoutPlayer from './WorkoutPlayer';
 import WorkoutSummaryModal from './WorkoutSummaryModal';
 
@@ -65,7 +66,7 @@ export default function GlobalWorkoutPlayer() {
   const isExerciseOrReplaceScreen =
     segs[0] === 'workout' && (segs[1] === 'exercise' || segs[1] === 'replace');
 
-  const defaultNavHeight = Platform.OS === 'ios' ? 90 : 74;
+  const { height: defaultNavHeight } = getBottomNavLayout(insets.bottom);
   const bottomNavHeight = hasBottomNav ? defaultNavHeight : 0;
 
   return (

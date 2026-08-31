@@ -1,8 +1,12 @@
-import { Platform } from 'react-native';
 import { Tabs } from 'expo-router';
 import { Home, Dumbbell, Search, User } from 'lucide-react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { getBottomNavLayout } from '../../src/utils/layout';
 
 export default function TabLayout() {
+  const insets = useSafeAreaInsets();
+  const { height, bottomPadding } = getBottomNavLayout(insets.bottom);
+
   return (
     <Tabs
       screenOptions={{
@@ -12,9 +16,9 @@ export default function TabLayout() {
           backgroundColor: '#1E222B', // Dark slate background for tab bar
           borderTopWidth: 0,
           elevation: 0,
-          height: Platform.OS === 'ios' ? 90 : 74,
+          height,
           paddingTop: 10,
-          paddingBottom: Platform.OS === 'ios' ? 28 : 14,
+          paddingBottom: bottomPadding,
         },
         tabBarItemStyle: {
           justifyContent: 'center',
