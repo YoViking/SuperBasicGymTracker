@@ -37,7 +37,7 @@ export default function ExerciseStats({ exerciseName }: ExerciseStatsProps) {
       <View style={styles.pbContainer}>
         <Trophy size={24} color="#F5D800" />
         <Text style={styles.pbText}>
-          Current PB: <Text style={styles.pbValue}>{stats.currentPB} kg</Text>
+          Current PB: <Text style={styles.pbValue}>{stats.currentPBText || `${stats.currentPB} ${stats.unit}`}</Text>
         </Text>
       </View>
 
@@ -45,7 +45,9 @@ export default function ExerciseStats({ exerciseName }: ExerciseStatsProps) {
         {/* Legend */}
         <View style={styles.legendContainer}>
           <View style={styles.legendDot} />
-          <Text style={styles.legendText}>Estimerat 1RM</Text>
+          <Text style={styles.legendText}>
+            {stats.metricType === 'time' ? 'Max tid (sekunder)' : 'Estimerat 1RM'}
+          </Text>
         </View>
 
         {stats.chartData.length > 0 ? (
@@ -83,7 +85,9 @@ export default function ExerciseStats({ exerciseName }: ExerciseStatsProps) {
         <Text style={styles.xAxisTitle}>Vecka / Datum</Text>
 
         {/* Y Axis title rotated */}
-        <Text style={styles.yAxisTitle}>Vikt (kg)</Text>
+        <Text style={styles.yAxisTitle}>
+          {stats.metricType === 'time' ? 'Tid (sek)' : 'Vikt (kg)'}
+        </Text>
       </View>
     </View>
   );

@@ -24,21 +24,40 @@ export function formatWeightDate(dateStr: string): string {
 }
 
 /**
+ * Checks if an exercise is timed (measured in seconds/duration rather than reps),
+ * e.g., Planks, Static Holds, Hollow Body, L-Sit, Wall Sit, Dead Hang.
+ */
+export function isTimedExercise(exerciseName: string, equipment?: string): boolean {
+  const eq = (equipment || '').toLowerCase().trim();
+  const name = (exerciseName || '').toLowerCase().trim();
+
+  const timedKeywords = [
+    'plank', 'planka', 'side plank', 'sidoplanka',
+    'hollow body', 'hollow hold', 'l-sit', 'lsit',
+    'wall sit', 'jägarvila', 'static hold', 'statisk',
+    'dead hang', 'hang hold'
+  ];
+
+  return timedKeywords.some(kw => name.includes(kw));
+}
+
+/**
  * Checks if an exercise relies on bodyweight based on equipment and naming patterns.
  */
 export function isBodyweightExercise(exerciseName: string, equipment?: string): boolean {
   const eq = (equipment || '').toLowerCase().trim();
-  if (eq === 'body only' || eq === 'bodyweight' || eq === 'body weight' || eq === 'calisthenics') {
+  if (eq === 'body only' || eq === 'bodyweight' || eq === 'body weight' || eq === 'calisthenics' || eq === 'kroppsvikt') {
     return true;
   }
 
   const name = (exerciseName || '').toLowerCase();
   const bodyweightKeywords = [
-    'pull-up', 'pullup', 'chin-up', 'chinup', 'muscle-up',
-    'push-up', 'pushup', 'armhävning', 'dip',
+    'pull-up', 'pullup', 'pull up', 'chin-up', 'chinup', 'chin up', 'chins', 'muscle-up', 'muscleup',
+    'push-up', 'pushup', 'push up', 'armhävning', 'armhävningar', 'dip', 'dips',
     'inverted row', 'australian pull',
-    'bodyweight squat', 'air squat', 'pistol squat',
-    'glute bridge', 'hanging leg raise', 'crunches', 'crunch', 'sit-up', 'situp'
+    'bodyweight squat', 'air squat', 'pistol squat', 'kroppsviktsknäböj',
+    'glute bridge', 'höftlyft', 'hanging leg raise', 'benlyft', 'crunches', 'crunch', 'sit-up', 'situp', 'sit-ups', 'situps',
+    'plank', 'planka', 'side plank', 'sidoplanka', 'hollow body', 'l-sit', 'wall sit', 'jägarvila', 'dead hang'
   ];
 
   const hasKeyword = bodyweightKeywords.some(kw => name.includes(kw));
@@ -59,12 +78,12 @@ export function getBodyweightMultiplier(exerciseName: string, equipment?: string
   const name = (exerciseName || '').toLowerCase();
 
   // Static holds & planks (volume calculated as 0 kg since measured in time)
-  if (name.includes('plank') || name.includes('static hold') || name.includes('hollow body') || name.includes('l-sit')) {
+  if (isTimedExercise(exerciseName, equipment)) {
     return 0.0;
   }
 
   // Pull-ups / Chin-ups / Muscle-ups (~95% of bodyweight)
-  if (name.includes('pull-up') || name.includes('chin-up') || name.includes('muscle-up') || name.includes('pullup') || name.includes('chinup')) {
+  if (name.includes('pull-up') || name.includes('chin-up') || name.includes('muscle-up') || name.includes('pullup') || name.includes('chinup') || name.includes('chins')) {
     return 0.95;
   }
 
@@ -86,7 +105,7 @@ export function getBodyweightMultiplier(exerciseName: string, equipment?: string
   }
 
   // Bodyweight squats / Lunges / Step-ups (~60% of bodyweight)
-  if (name.includes('squat') || name.includes('lunge') || name.includes('step-up') || name.includes('step up')) {
+  if (name.includes('squat') || name.includes('lunge') || name.includes('step-up') || name.includes('step up') || name.includes('knäböj')) {
     return 0.60;
   }
 
@@ -96,17 +115,39 @@ export function getBodyweightMultiplier(exerciseName: string, equipment?: string
   }
 
   // Glute bridges / Bodyweight hip thrusts (~50% of bodyweight)
-  if (name.includes('glute bridge') || name.includes('hip thrust')) {
+  if (name.includes('glute bridge') || name.includes('hip thrust') || name.includes('höftlyft')) {
     return 0.50;
   }
 
   // Core (crunches, sit-ups, leg raises ~40% of torso/legs weight)
-  if (name.includes('crunch') || name.includes('sit-up') || name.includes('situp') || name.includes('leg raise')) {
+  if (name.includes('crunch') || name.includes('sit-up') || name.includes('situp') || name.includes('leg raise') || name.includes('benlyft')) {
     return 0.40;
   }
 
   // Standard fallback for any other bodyweight exercise
   return 0.65;
+}
+
+/**
+ * Returns the effective lifted weight for an exercise.
+ * If bodyweight, effective weight = (userWeight * multiplier) + addedWeight.
+ * If traditional weighted, effective weight = weight.
+ */
+export function getEffectiveExerciseWeight(
+  weight: number,
+  exerciseName: string,
+  equipment?: string,
+  userWeight: number = DEFAULT_BODY_WEIGHT
+): number {
+  if (isTimedExercise(exerciseName, equipment)) {
+    return weight || 0;
+  }
+  if (isBodyweightExercise(exerciseName, equipment)) {
+    const multiplier = getBodyweightMultiplier(exerciseName, equipment);
+    const addedWeight = weight || 0;
+    return (userWeight * multiplier) + addedWeight;
+  }
+  return weight || 0;
 }
 
 /**
@@ -124,9 +165,7 @@ export function calculateSetVolume(
   if (reps <= 0) return 0;
 
   if (isBodyweightExercise(exerciseName, equipment)) {
-    const multiplier = getBodyweightMultiplier(exerciseName, equipment);
-    const addedWeight = weight || 0;
-    const effectiveWeight = (userWeight * multiplier) + addedWeight;
+    const effectiveWeight = getEffectiveExerciseWeight(weight, exerciseName, equipment, userWeight);
     return Math.round(reps * effectiveWeight);
   }
 

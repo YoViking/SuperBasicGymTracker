@@ -209,7 +209,9 @@ export default function HomeScreen() {
                     <View style={styles.prRight}>
                       <Text style={styles.prWeight}>
                         {pr.type === 'max_reps'
-                          ? `${pr.reps} reps (${pr.currentWeight} kg)`
+                          ? (pr.currentWeight > 0 ? `${pr.reps} reps (${pr.currentWeight} kg)` : `${pr.reps} reps`)
+                          : pr.type === 'max_time'
+                          ? (pr.currentWeight > 0 ? `${pr.reps} sek (${pr.currentWeight} kg)` : `${pr.reps} sek`)
                           : `${pr.currentWeight} kg`}
                       </Text>
                       <Text style={styles.prDelta}>
