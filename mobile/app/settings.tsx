@@ -2,8 +2,9 @@ import React, { useState, useEffect } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, Switch, Modal, Pressable, Platform, ScrollView } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter, Stack } from 'expo-router';
-import { ArrowLeft, ChevronRight, Check, LogOut } from 'lucide-react-native';
+import { ArrowLeft, ChevronRight, Check, LogOut, Sparkles } from 'lucide-react-native';
 import { supabase } from '../src/lib/supabase';
+import OnboardingWizard from '../src/components/onboarding/OnboardingWizard';
 import {
   REST_TIMER_OPTIONS,
   RestTimerOption,
@@ -19,6 +20,7 @@ export default function SettingsScreen() {
   const [restTimerInterval, setRestTimerIntervalState] = useState<number>(30);
   const [keepAwake, setKeepAwake] = useState<boolean>(true);
   const [isTimerModalVisible, setIsTimerModalVisible] = useState<boolean>(false);
+  const [isOnboardingModalVisible, setIsOnboardingModalVisible] = useState<boolean>(false);
   const [userEmail, setUserEmail] = useState<string>('');
 
   useEffect(() => {
@@ -78,6 +80,24 @@ export default function SettingsScreen() {
       </View>
 
       <ScrollView style={styles.container} contentContainerStyle={styles.scrollContent}>
+        {/* Träningsprofil & Onboarding Section */}
+        <View style={styles.section}>
+          <Text style={styles.sectionTitle}>Träningsprofil</Text>
+          <TouchableOpacity
+            style={styles.settingCard}
+            onPress={() => setIsOnboardingModalVisible(true)}
+            activeOpacity={0.7}
+          >
+            <View style={styles.settingTextContainer}>
+              <Text style={styles.settingTitle}>Mål, plats & utrustning</Text>
+              <Text style={styles.settingSubtitle}>
+                Uppdatera dina träningspreferenser och gör om onboarding
+              </Text>
+            </View>
+            <ChevronRight size={20} color="#94A3B8" />
+          </TouchableOpacity>
+        </View>
+
         {/* Vilotimer Section */}
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>Vilotimer</Text>
@@ -229,6 +249,20 @@ export default function SettingsScreen() {
           </Pressable>
         </Pressable>
       </Modal>
+
+      <OnboardingWizard
+        visible={isOnboardingModalVisible}
+        onClose={() => setIsOnboardingModalVisible(false)}
+        onCompleted={(folderId, folderName) => {
+          setIsOnboardingModalVisible(false);
+          if (folderId) {
+            router.push({
+              pathname: '/folder/[id]',
+              params: { id: folderId, name: folderName || 'AI Träningsprogram' },
+            });
+          }
+        }}
+      />
     </SafeAreaView>
   );
 }

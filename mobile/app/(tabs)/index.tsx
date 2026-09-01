@@ -17,12 +17,27 @@ import { useHomeData } from '../../src/hooks/useHomeData';
 import { getMuscleGroupImage, getDefaultWorkoutImage, isAiFolder, isAiWorkout } from '../../src/utils/images';
 import { Workout } from '../../src/types';
 import { cacheService } from '../../src/services/cacheService';
+import { useAuth } from '../../src/context/AuthContext';
+import { onboardingService } from '../../src/services/onboardingService';
+import OnboardingWizard from '../../src/components/onboarding/OnboardingWizard';
 
 export default function HomeScreen() {
   const router = useRouter();
+  const { user } = useAuth();
   const weeklyStats = useWeeklyStats();
   const homeData = useHomeData();
   const [refreshing, setRefreshing] = React.useState(false);
+  const [showOnboarding, setShowOnboarding] = React.useState(false);
+
+  React.useEffect(() => {
+    if (user?.id) {
+      onboardingService.getHasCompletedOnboarding(user.id).then((completed) => {
+        if (!completed) {
+          setShowOnboarding(true);
+        }
+      });
+    }
+  }, [user?.id]);
 
   const handleRefresh = async () => {
     setRefreshing(true);
@@ -339,6 +354,21 @@ export default function HomeScreen() {
           </>
         )}
       </ScrollView>
+
+      <OnboardingWizard
+        visible={showOnboarding}
+        onClose={() => setShowOnboarding(false)}
+        onCompleted={(folderId, folderName) => {
+          setShowOnboarding(false);
+          handleRefresh();
+          if (folderId) {
+            router.push({
+              pathname: '/folder/[id]',
+              params: { id: folderId, name: folderName || 'AI Träningsprogram' },
+            });
+          }
+        }}
+      />
     </SafeAreaView>
   );
 }

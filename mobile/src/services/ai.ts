@@ -66,19 +66,22 @@ export async function fetchAIProgram(inputs: {
 }): Promise<GeneratedProgram> {
   const { location, equipment, daysPerWeek, duration, splitType, injuries, exclusions, fitnessGoal } = inputs;
   
-  // Read key. In Expo client, environment variables prefixed with EXPO_PUBLIC_ are exposed.
-  const apiKey = process.env.EXPO_PUBLIC_OPENCODE_API_KEY || process.env.OPENCODE_API_KEY;
-  const modelName = process.env.EXPO_PUBLIC_OPENCODE_MODEL || process.env.OPENCODE_MODEL || 'deepseek-v4-flash-free';
+  // Read keys. In Expo client, environment variables prefixed with EXPO_PUBLIC_ are exposed.
+  const geminiKey = process.env.EXPO_PUBLIC_GEMINI_API_KEY || process.env.GEMINI_API_KEY;
+  const opencodeKey = process.env.EXPO_PUBLIC_OPENCODE_API_KEY || process.env.OPENCODE_API_KEY;
+  const opencodeModel = process.env.EXPO_PUBLIC_OPENCODE_MODEL || process.env.OPENCODE_MODEL || 'mimo-v2.5-free';
 
-  // Fallback if key is missing or is the default placeholder
-  if (!apiKey || apiKey === 'your_opencode_api_key_here') {
-    console.log('No OpenCode API key found on client. Using client-side mock generator.');
+  // Check if Gemini key is available (or if opencodeKey is actually a Gemini key starting with AIza)
+  const activeGeminiKey = geminiKey || (opencodeKey && opencodeKey.startsWith('AIza') ? opencodeKey : null);
+  const activeOpenCodeKey = !activeGeminiKey && opencodeKey && opencodeKey !== 'your_opencode_api_key_here' ? opencodeKey : null;
+
+  // Fallback if no API key is provided
+  if (!activeGeminiKey && !activeOpenCodeKey) {
+    console.log('No AI API key found on client. Using client-side mock generator.');
     return generateMockProgram(inputs);
   }
 
   try {
-    console.log(`Calling OpenCode Zen API client-side with model ${modelName}...`);
-    
     const systemPrompt = `You are an expert strength coach.
 Generate a balanced weekly workout program based on user constraints.
 Strictly avoid exercises that strain reported injury areas:
@@ -91,6 +94,14 @@ Strictly avoid exercises that strain reported injury areas:
 
 Only select exercises matching the provided available equipment.
 Exclusions requested by the user: "${exclusions || 'None'}". Ensure you avoid any exercises or movements mentioned here.
+
+Duration & Volume Guidelines:
+The number of exercises per workout MUST match the target duration consistently:
+- 30 minutes: exactly 4 exercises per workout.
+- 45 minutes: exactly 5 exercises per workout.
+- 60 minutes: exactly 6 exercises per workout.
+- 90 minutes: exactly 7-8 exercises per workout.
+Every workout in the program must have a balanced and complete list of exercises according to this count. Never output a workout with only 2-3 exercises.
 
 Return ONLY a structured JSON response matching this exact schema:
 {
@@ -127,30 +138,66 @@ Return ONLY a structured JSON response matching this exact schema:
 - Specific Exclusions/Notes: ${exclusions || 'None'}
 - Fitness Goal: ${fitnessGoal}`;
 
-    const response = await fetch('https://opencode.ai/zen/v1/chat/completions', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${apiKey}`
-      },
-      body: JSON.stringify({
-        model: modelName,
-        messages: [
-          { role: 'system', content: systemPrompt },
-          { role: 'user', content: userPrompt }
-        ],
-        response_format: { type: 'json_object' }
-      })
-    });
+    let content: string | null = null;
 
-    if (!response.ok) {
-      const errText = await response.text();
-      console.warn(`OpenCode Zen API returned error status ${response.status}: ${errText}. Falling back to mock generator.`);
-      return generateMockProgram(inputs);
+    if (activeGeminiKey) {
+      console.log('Calling Google Gemini 3.6 Flash API...');
+      const response = await fetch(
+        `https://generativelanguage.googleapis.com/v1beta/models/gemini-3.6-flash:generateContent?key=${activeGeminiKey}`,
+        {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            contents: [
+              {
+                role: 'user',
+                parts: [{ text: `${systemPrompt}\n\n${userPrompt}` }],
+              },
+            ],
+            generationConfig: {
+              responseMimeType: 'application/json',
+            },
+          }),
+        }
+      );
+
+      if (!response.ok) {
+        const errText = await response.text();
+        console.warn(`Gemini API returned error status ${response.status}: ${errText}. Falling back to mock generator.`);
+        return generateMockProgram(inputs);
+      }
+
+      const geminiData = await response.json();
+      content = geminiData.candidates?.[0]?.content?.parts?.[0]?.text || null;
+    } else {
+      console.log(`Calling OpenCode Zen API client-side with model ${opencodeModel}...`);
+      const response = await fetch('https://opencode.ai/zen/v1/chat/completions', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${activeOpenCodeKey}`,
+        },
+        body: JSON.stringify({
+          model: opencodeModel,
+          messages: [
+            { role: 'system', content: systemPrompt },
+            { role: 'user', content: userPrompt },
+          ],
+          response_format: { type: 'json_object' },
+        }),
+      });
+
+      if (!response.ok) {
+        const errText = await response.text();
+        console.warn(`OpenCode Zen API returned error status ${response.status}: ${errText}. Falling back to mock generator.`);
+        return generateMockProgram(inputs);
+      }
+
+      const apiData = await response.json();
+      content = apiData.choices?.[0]?.message?.content || null;
     }
-
-    const apiData = await response.json();
-    const content = apiData.choices?.[0]?.message?.content;
     
     if (!content) {
       throw new Error('No content returned from OpenCode Zen API');
@@ -506,123 +553,178 @@ function generateMockProgram(inputs: {
     goalDesc = 'allmän fitness';
   }
 
+  const durNum = parseInt(duration) || 60;
+  let targetExerciseCount = 6;
+  if (durNum <= 30) targetExerciseCount = 4;
+  else if (durNum <= 45) targetExerciseCount = 5;
+  else if (durNum <= 60) targetExerciseCount = 6;
+  else targetExerciseCount = 8;
+
   const getExercisePool = (muscle: string): Array<{ name: string; eq: string; notes: string }> => {
     const list: Array<{ name: string; eq: string; notes: string; strains: string[] }> = [];
 
     if (muscle === 'Chest') {
       if (hasBarbell && !hasInjury('wrists') && !hasInjury('shoulders')) {
-        list.push({ name: 'Barbell Bench Press', eq: 'barbell', notes: 'Squeeze shoulder blades together', strains: ['wrists', 'shoulders'] });
-        list.push({ name: 'Incline Barbell Bench Press', eq: 'barbell', notes: 'Lower barbell to upper chest', strains: ['wrists', 'shoulders'] });
+        list.push({ name: 'Barbell Bench Press', eq: 'barbell', notes: 'Squeeze shoulder blades together, lower bar to mid-chest', strains: ['wrists', 'shoulders'] });
+        list.push({ name: 'Incline Barbell Bench Press', eq: 'barbell', notes: 'Lower barbell to upper chest with control', strains: ['wrists', 'shoulders'] });
+        list.push({ name: 'Decline Barbell Bench Press', eq: 'barbell', notes: 'Target lower chest fibers', strains: ['wrists', 'shoulders'] });
       }
       if (hasDumbbell) {
         list.push({ name: 'Dumbbell Bench Press', eq: 'dumbbell', notes: 'Neutral grip is safer on wrists and shoulders', strains: [] });
-        list.push({ name: 'Incline Dumbbell Bench Press', eq: 'dumbbell', notes: 'Keeps shoulders in a safer path', strains: [] });
+        list.push({ name: 'Incline Dumbbell Bench Press', eq: 'dumbbell', notes: 'Focus on upper chest contraction', strains: [] });
+        list.push({ name: 'Dumbbell Chest Fly', eq: 'dumbbell', notes: 'Maintain slight elbow bend and stretch', strains: ['shoulders'] });
       }
       if (hasCable && !hasInjury('shoulders')) {
-        list.push({ name: 'Cable Crossover', eq: 'cable', notes: 'Squeeze chest at the bottom', strains: ['shoulders'] });
+        list.push({ name: 'Cable Crossover', eq: 'cable', notes: 'Squeeze chest hard at contraction peak', strains: ['shoulders'] });
+        list.push({ name: 'Low Cable Chest Fly', eq: 'cable', notes: 'Scoop upward for upper chest focus', strains: ['shoulders'] });
       }
       if (hasMachine) {
-        list.push({ name: 'Chest Press Machine', eq: 'machine', notes: 'Safe alternative to free weights', strains: [] });
+        list.push({ name: 'Chest Press Machine', eq: 'machine', notes: 'Fixed path gives great stability for safe overload', strains: [] });
+        list.push({ name: 'Pec Deck Fly', eq: 'machine', notes: 'Full stretch and peak contraction', strains: [] });
       }
       if (hasBodyweight && !hasInjury('wrists') && !hasInjury('shoulders')) {
-        list.push({ name: 'Push-Up', eq: 'body only', notes: 'Keep body in straight line', strains: ['wrists', 'shoulders'] });
+        list.push({ name: 'Push-Up', eq: 'body only', notes: 'Keep core tight and body in a straight line', strains: ['wrists', 'shoulders'] });
+        list.push({ name: 'Dips', eq: 'body only', notes: 'Lean slightly forward to bias chest over triceps', strains: ['shoulders', 'elbows'] });
       }
     }
 
     if (muscle === 'Back') {
       if (hasBarbell && !hasInjury('lower back') && !hasInjury('wrists')) {
-        list.push({ name: 'Barbell Deadlift', eq: 'barbell', notes: 'Keep spine neutral, hinge hips', strains: ['lower back', 'wrists'] });
-        list.push({ name: 'Bent-Over Barbell Row', eq: 'barbell', notes: 'Pull bar towards lower abdomen', strains: ['lower back', 'wrists'] });
+        list.push({ name: 'Barbell Deadlift', eq: 'barbell', notes: 'Keep spine neutral, hinge hips back', strains: ['lower back', 'wrists'] });
+        list.push({ name: 'Bent-Over Barbell Row', eq: 'barbell', notes: 'Pull bar towards lower abdomen with flat back', strains: ['lower back', 'wrists'] });
+        list.push({ name: 'Barbell Shrug', eq: 'barbell', notes: 'Elevate traps straight up', strains: ['wrists'] });
       }
       if (hasDumbbell && !hasInjury('lower back')) {
         list.push({ name: 'One-Arm Dumbbell Row', eq: 'dumbbell', notes: 'Support body on bench to protect lower back', strains: [] });
+        list.push({ name: 'Chest-Supported Dumbbell Row', eq: 'dumbbell', notes: 'Eliminates lower back strain, strict back focus', strains: [] });
+        list.push({ name: 'Dumbbell Pullover', eq: 'dumbbell', notes: 'Stretch lats over bench with soft elbows', strains: ['shoulders'] });
       }
       if (hasCable) {
-        list.push({ name: 'Lat Pulldown', eq: 'cable', notes: 'Pull down to upper collarbone', strains: [] });
-        list.push({ name: 'Seated Cable Row', eq: 'cable', notes: 'Sit upright, pull with chest out', strains: [] });
+        list.push({ name: 'Lat Pulldown', eq: 'cable', notes: 'Pull down to upper collarbone with wide grip', strains: [] });
+        list.push({ name: 'Seated Cable Row', eq: 'cable', notes: 'Sit upright, pull into belly with chest up', strains: [] });
+        list.push({ name: 'Straight-Arm Cable Pushdown', eq: 'cable', notes: 'Isolate lats without arm fatigue', strains: [] });
       }
       if (hasMachine) {
-        list.push({ name: 'Chest-Supported Row Machine', eq: 'machine', notes: 'Perfect row alternative for lower back injuries', strains: [] });
+        list.push({ name: 'Chest-Supported Row Machine', eq: 'machine', notes: 'Safe row alternative for lower back health', strains: [] });
+        list.push({ name: 'Lat Pulldown Machine', eq: 'machine', notes: 'Smooth guided pull for lat width', strains: [] });
       }
       if (hasBodyweight && !hasInjury('elbows')) {
-        list.push({ name: 'Pull-Up', eq: 'body only', notes: 'Full range of motion', strains: ['elbows'] });
+        list.push({ name: 'Pull-Up', eq: 'body only', notes: 'Full range of motion, drive elbows down', strains: ['elbows'] });
+        list.push({ name: 'Inverted Row', eq: 'body only', notes: 'Horizontal pull using bodyweight bar', strains: [] });
       }
     }
 
     if (muscle === 'Legs') {
       if (hasBarbell && !hasInjury('knees') && !hasInjury('lower back')) {
-        list.push({ name: 'Barbell Back Squat', eq: 'barbell', notes: 'Sit back, keep chest up', strains: ['knees', 'lower back'] });
-        list.push({ name: 'Barbell Romanian Deadlift', eq: 'barbell', notes: 'Feel stretch in hamstrings', strains: ['lower back'] });
+        list.push({ name: 'Barbell Back Squat', eq: 'barbell', notes: 'Sit back, keep chest up, brace core', strains: ['knees', 'lower back'] });
+        list.push({ name: 'Barbell Romanian Deadlift', eq: 'barbell', notes: 'Feel deep stretch in hamstrings with soft knees', strains: ['lower back'] });
+        list.push({ name: 'Barbell Front Squat', eq: 'barbell', notes: 'Upright torso quad emphasis', strains: ['knees', 'wrists'] });
       }
       if (hasDumbbell && !hasInjury('knees')) {
-        list.push({ name: 'Dumbbell Goblet Squat', eq: 'dumbbell', notes: 'Hold close to chest, keep heels down', strains: [] });
+        list.push({ name: 'Dumbbell Goblet Squat', eq: 'dumbbell', notes: 'Hold close to chest, keep heels firmly down', strains: [] });
         list.push({ name: 'Dumbbell Romanian Deadlift', eq: 'dumbbell', notes: 'Hinge hips back, keep back flat', strains: [] });
+        list.push({ name: 'Dumbbell Bulgarian Split Squat', eq: 'dumbbell', notes: 'Rear foot elevated for deep quad/glute work', strains: ['knees'] });
+        list.push({ name: 'Dumbbell Walking Lunge', eq: 'dumbbell', notes: 'Step forward smoothly with tall posture', strains: ['knees'] });
       }
       if (hasMachine) {
         if (!hasInjury('knees')) {
-          list.push({ name: 'Leg Press', eq: 'machine', notes: 'Adjust depth to protect knees', strains: ['knees'] });
+          list.push({ name: 'Leg Press', eq: 'machine', notes: 'Adjust foot placement to protect knees', strains: ['knees'] });
+          list.push({ name: 'Leg Extension', eq: 'machine', notes: 'Strict quad extension and top squeeze', strains: ['knees'] });
         }
-        list.push({ name: 'Lying Leg Curl', eq: 'machine', notes: 'Squeeze hamstrings at top', strains: [] });
+        list.push({ name: 'Lying Leg Curl', eq: 'machine', notes: 'Squeeze hamstrings at top of motion', strains: [] });
+        list.push({ name: 'Standing Calf Raise Machine', eq: 'machine', notes: 'Full calf stretch and heel drive', strains: [] });
       }
       if (hasBodyweight) {
-        list.push({ name: 'Glute Bridge', eq: 'body only', notes: 'Squeeze glutes at top', strains: [] });
+        list.push({ name: 'Glute Bridge', eq: 'body only', notes: 'Drive through heels, squeeze glutes at top', strains: [] });
         if (!hasInjury('knees')) {
-          list.push({ name: 'Bodyweight Squat', eq: 'body only', notes: 'Keep chest tall', strains: ['knees'] });
+          list.push({ name: 'Bodyweight Squat', eq: 'body only', notes: 'Keep chest tall, push knees outward', strains: ['knees'] });
+          list.push({ name: 'Bodyweight Lunges', eq: 'body only', notes: 'Alternating step forward lunges', strains: ['knees'] });
         }
+        list.push({ name: 'Standing Bodyweight Calf Raise', eq: 'body only', notes: 'Slow tempo on stairs or flat floor', strains: [] });
       }
     }
 
     if (muscle === 'Shoulders') {
       if (hasBarbell && !hasInjury('shoulders') && !hasInjury('wrists')) {
-        list.push({ name: 'Barbell Overhead Press', eq: 'barbell', notes: 'Strict press, do not flare elbows', strains: ['shoulders', 'wrists'] });
+        list.push({ name: 'Barbell Overhead Press', eq: 'barbell', notes: 'Strict vertical press, brace glutes and core', strains: ['shoulders', 'wrists'] });
+        list.push({ name: 'Barbell Upright Row', eq: 'barbell', notes: 'Pull elbows high to side delts', strains: ['shoulders', 'wrists'] });
       }
       if (hasDumbbell) {
-        list.push({ name: 'Dumbbell Lateral Raise', eq: 'dumbbell', notes: 'Raise to shoulder level with pinkies up slightly', strains: [] });
+        list.push({ name: 'Dumbbell Lateral Raise', eq: 'dumbbell', notes: 'Raise to shoulder level with pinkies slightly up', strains: [] });
         if (!hasInjury('shoulders')) {
-          list.push({ name: 'Dumbbell Shoulder Press', eq: 'dumbbell', notes: 'Press straight up with palms in', strains: ['shoulders'] });
+          list.push({ name: 'Dumbbell Shoulder Press', eq: 'dumbbell', notes: 'Press up smoothly with palms inward', strains: ['shoulders'] });
+          list.push({ name: 'Arnold Press', eq: 'dumbbell', notes: 'Rotate wrists smoothly during overhead press', strains: ['shoulders'] });
         }
+        list.push({ name: 'Dumbbell Rear Delt Fly', eq: 'dumbbell', notes: 'Hinge forward and flare elbows back', strains: [] });
       }
       if (hasCable) {
-        list.push({ name: 'Cable Face Pull', eq: 'cable', notes: 'Pull to nose, squeeze rear delts', strains: [] });
+        list.push({ name: 'Cable Face Pull', eq: 'cable', notes: 'Pull rope to eye level, squeeze rear delts', strains: [] });
+        list.push({ name: 'Cable Lateral Raise', eq: 'cable', notes: 'Continuous tension on side delts', strains: [] });
       }
       if (hasMachine) {
-        list.push({ name: 'Shoulder Press Machine', eq: 'machine', notes: 'Fixed path offers high stability', strains: ['shoulders'] });
+        list.push({ name: 'Shoulder Press Machine', eq: 'machine', notes: 'Fixed guided path offers maximum shoulder safety', strains: ['shoulders'] });
+        list.push({ name: 'Reverse Pec Deck Machine', eq: 'machine', notes: 'Isolate rear deltoids safely', strains: [] });
       }
     }
 
     if (muscle === 'Arms') {
       if (hasBarbell && !hasInjury('wrists')) {
-        list.push({ name: 'Barbell Bicep Curl', eq: 'barbell', notes: 'Do not swing body', strains: ['wrists'] });
+        list.push({ name: 'Barbell Bicep Curl', eq: 'barbell', notes: 'Do not swing hips, isolate biceps', strains: ['wrists'] });
+        list.push({ name: 'EZ-Bar Skull Crusher', eq: 'barbell', notes: 'Lower bar towards forehead, extend triceps', strains: ['elbows', 'wrists'] });
       }
       if (hasDumbbell) {
-        list.push({ name: 'Dumbbell Hammer Curl', eq: 'dumbbell', notes: 'Neutral grip is very safe on wrists', strains: [] });
-        list.push({ name: 'Incline Dumbbell Bicep Curl', eq: 'dumbbell', notes: 'Stretch bicep at the bottom', strains: [] });
+        list.push({ name: 'Dumbbell Hammer Curl', eq: 'dumbbell', notes: 'Neutral grip is very safe on wrists and builds forearms', strains: [] });
+        list.push({ name: 'Incline Dumbbell Bicep Curl', eq: 'dumbbell', notes: 'Stretch bicep at bottom with elbow back', strains: [] });
+        list.push({ name: 'Dumbbell Overhead Tricep Extension', eq: 'dumbbell', notes: 'Keep elbows tucked overhead', strains: ['elbows'] });
+        list.push({ name: 'Dumbbell Concentration Curl', eq: 'dumbbell', notes: 'Elbow resting against inner thigh for strict peak', strains: [] });
       }
       if (hasCable && !hasInjury('elbows')) {
-        list.push({ name: 'Triceps Rope Pushdown', eq: 'cable', notes: 'Keep elbows tucked at sides', strains: ['elbows'] });
+        list.push({ name: 'Triceps Rope Pushdown', eq: 'cable', notes: 'Flare rope out at bottom contraction', strains: ['elbows'] });
+        list.push({ name: 'Straight-Bar Cable Curl', eq: 'cable', notes: 'Constant cable tension on biceps', strains: [] });
+        list.push({ name: 'Cable Overhead Tricep Extension', eq: 'cable', notes: 'Long head tricep stretch', strains: [] });
+      }
+      if (hasMachine) {
+        list.push({ name: 'Preacher Curl Machine', eq: 'machine', notes: 'Locked arm angle prevents momentum', strains: [] });
+        list.push({ name: 'Triceps Dip Machine', eq: 'machine', notes: 'Controlled pressing down for tricep burnout', strains: [] });
       }
       if (hasBands) {
-        list.push({ name: 'Bicep Band Curl', eq: 'bands', notes: 'Keep constant tension', strains: [] });
+        list.push({ name: 'Bicep Band Curl', eq: 'bands', notes: 'Keep constant tension throughout movement', strains: [] });
+        list.push({ name: 'Band Tricep Pushdown', eq: 'bands', notes: 'High rep pump finisher', strains: [] });
+      }
+      if (hasBodyweight) {
+        list.push({ name: 'Bench Dips', eq: 'body only', notes: 'Hands on bench, lower body with arms', strains: ['shoulders', 'elbows'] });
+        list.push({ name: 'Diamond Push-Up', eq: 'body only', notes: 'Close hand placement for triceps', strains: ['wrists', 'elbows'] });
       }
     }
 
     if (muscle === 'Core') {
-      list.push({ name: 'Plank', eq: 'body only', notes: 'Keep core tight, body level', strains: [] });
-      list.push({ name: 'Abdominal Crunch', eq: 'body only', notes: 'Contract abs, do not pull neck', strains: [] });
+      list.push({ name: 'Plank', eq: 'body only', notes: 'Brace core tightly, body completely straight', strains: [] });
+      list.push({ name: 'Abdominal Crunch', eq: 'body only', notes: 'Contract abs, do not pull behind neck', strains: [] });
+      list.push({ name: 'Hanging Leg Raise', eq: 'body only', notes: 'Raise knees or legs to hip height', strains: [] });
+      list.push({ name: 'Russian Twist', eq: 'body only', notes: 'Rotate torso side to side under control', strains: [] });
+      if (hasCable) {
+        list.push({ name: 'Cable Woodchopper', eq: 'cable', notes: 'Rotational core power and obliques', strains: [] });
+      }
     }
 
     if (muscle === 'Glutes') {
       if (hasDumbbell) {
-        list.push({ name: 'Dumbbell Hip Thrust', eq: 'dumbbell', notes: 'Drive hips up, squeeze glutes', strains: [] });
+        list.push({ name: 'Dumbbell Hip Thrust', eq: 'dumbbell', notes: 'Drive hips up, pause and squeeze glutes', strains: [] });
       } else if (hasBarbell && !hasInjury('lower back')) {
-        list.push({ name: 'Barbell Hip Thrust', eq: 'barbell', notes: 'Hold at top for 1s', strains: ['lower back'] });
+        list.push({ name: 'Barbell Hip Thrust', eq: 'barbell', notes: 'Hold top squeeze for 1 second', strains: ['lower back'] });
       } else {
-        list.push({ name: 'Bodyweight Hip Thrust', eq: 'body only', notes: 'High volume squeeze', strains: [] });
+        list.push({ name: 'Bodyweight Hip Thrust', eq: 'body only', notes: 'High volume glute pump', strains: [] });
+      }
+      if (hasCable) {
+        list.push({ name: 'Cable Glute Kickback', eq: 'cable', notes: 'Kick leg back under control', strains: [] });
+      }
+      if (hasMachine) {
+        list.push({ name: 'Seated Hip Abduction Machine', eq: 'machine', notes: 'Push knees outward to hit upper glutes', strains: [] });
       }
     }
 
     if (list.length === 0) {
-      list.push({ name: `${muscle} Exercise`, eq: 'body only', notes: 'Do standard movement', strains: [] });
+      list.push({ name: `${muscle} Motion`, eq: 'body only', notes: 'Standard form and control', strains: [] });
     }
 
     return list.filter(ex => {
@@ -658,16 +760,16 @@ function generateMockProgram(inputs: {
         muscleGroupsPerDay.push(['Chest', 'Shoulders', 'Arms']);
       } else if (mod === 2) {
         names.push(`Pass ${d}: Pull (Rygg/Biceps)`);
-        muscleGroupsPerDay.push(['Back', 'Arms']);
+        muscleGroupsPerDay.push(['Back', 'Arms', 'Core']);
       } else {
-        names.push(`Pass ${d}: Legs (Ben/Mage)`);
+        names.push(`Pass ${d}: Legs (Ben/Rumpa/Mage)`);
         muscleGroupsPerDay.push(['Legs', 'Glutes', 'Core']);
       }
     }
   } else {
     if (daysPerWeek === 1) {
       names.push('Helkropp Express');
-      muscleGroupsPerDay.push(['Legs', 'Chest', 'Back', 'Core']);
+      muscleGroupsPerDay.push(['Legs', 'Chest', 'Back', 'Shoulders', 'Core']);
     } else if (daysPerWeek === 2) {
       names.push('Pass A: Överkropp');
       muscleGroupsPerDay.push(['Chest', 'Back', 'Shoulders', 'Arms']);
@@ -677,53 +779,91 @@ function generateMockProgram(inputs: {
       names.push('Pass 1: Bröst, Rygg & Armar');
       muscleGroupsPerDay.push(['Chest', 'Back', 'Arms']);
       names.push('Pass 2: Ben & Rumpa');
-      muscleGroupsPerDay.push(['Legs', 'Glutes']);
-      names.push('Pass 3: Axlar & Mage');
-      muscleGroupsPerDay.push(['Shoulders', 'Core']);
+      muscleGroupsPerDay.push(['Legs', 'Glutes', 'Core']);
+      names.push('Pass 3: Axlar, Armar & Mage');
+      muscleGroupsPerDay.push(['Shoulders', 'Arms', 'Core']);
     } else {
       for (let d = 1; d <= daysPerWeek; d++) {
-        names.push(`Pass ${d}: Split`);
-        const muscles = [['Chest', 'Arms'], ['Legs'], ['Back', 'Core'], ['Shoulders', 'Glutes']];
-        muscleGroupsPerDay.push(muscles[(d - 1) % muscles.length]);
+        const idx = (d - 1) % 4;
+        if (idx === 0) {
+          names.push(`Pass ${d}: Bröst & Triceps`);
+          muscleGroupsPerDay.push(['Chest', 'Arms', 'Shoulders']);
+        } else if (idx === 1) {
+          names.push(`Pass ${d}: Rygg & Biceps`);
+          muscleGroupsPerDay.push(['Back', 'Arms', 'Core']);
+        } else if (idx === 2) {
+          names.push(`Pass ${d}: Ben & Glutes`);
+          muscleGroupsPerDay.push(['Legs', 'Glutes', 'Core']);
+        } else {
+          names.push(`Pass ${d}: Axlar & Mage`);
+          muscleGroupsPerDay.push(['Shoulders', 'Core', 'Arms']);
+        }
       }
     }
   }
 
   for (let i = 0; i < daysPerWeek; i++) {
-    const dayName = names[i] || `Day ${i + 1}`;
+    const dayName = names[i] || `Pass ${i + 1}`;
     const muscles = muscleGroupsPerDay[i] || ['Legs', 'Chest', 'Back'];
     const exercisesList: any[] = [];
+    const usedNames = new Set<string>();
 
-    for (const muscle of muscles) {
-      const pool = getExercisePool(muscle);
-      if (pool.length > 0) {
-        const numToSelect = muscles.length > 4 ? 1 : 2;
-        const selected = pool.slice(0, numToSelect);
-        selected.forEach(ex => {
+    // Round-robin pull from each muscle pool until targetExerciseCount is reached
+    let round = 0;
+    while (exercisesList.length < targetExerciseCount && round < 6) {
+      let addedInThisRound = 0;
+      for (const muscle of muscles) {
+        if (exercisesList.length >= targetExerciseCount) break;
+
+        const pool = getExercisePool(muscle);
+        const candidate = pool.find(ex => !usedNames.has(ex.name));
+        if (candidate) {
+          usedNames.add(candidate.name);
           exercisesList.push({
-            exerciseName: ex.name,
+            exerciseName: candidate.name,
             targetMuscle: muscle,
-            equipment: ex.eq,
+            equipment: candidate.eq,
             sets: sets,
             reps: reps,
             restSeconds: rest,
-            notes: ex.notes
+            notes: candidate.notes
           });
-        });
+          addedInThisRound++;
+        }
       }
+      if (addedInThisRound === 0) {
+        // If pools are exhausted, fill from Core or secondary muscles
+        const fallbackPool = getExercisePool('Core');
+        const fallbackCandidate = fallbackPool.find(ex => !usedNames.has(ex.name));
+        if (fallbackCandidate) {
+          usedNames.add(fallbackCandidate.name);
+          exercisesList.push({
+            exerciseName: fallbackCandidate.name,
+            targetMuscle: 'Core',
+            equipment: fallbackCandidate.eq,
+            sets: sets,
+            reps: reps,
+            restSeconds: rest,
+            notes: fallbackCandidate.notes
+          });
+        } else {
+          break;
+        }
+      }
+      round++;
     }
 
     workouts.push({
       dayName: dayName,
       targetFocus: muscles.join(', '),
-      estimatedDurationMinutes: parseInt(duration) || 60,
-      exercises: exercisesList.slice(0, 6)
+      estimatedDurationMinutes: durNum,
+      exercises: exercisesList
     });
   }
 
   return {
     programName: `AI-Program: ${fitnessGoal.split(' ')[0]} (${splitType.split(' ')[0]})`,
-    description: `Ett skräddarsytt ${daysPerWeek}-dagars program optimerat för ${goalDesc}. Anpassat för ${location} och din tillgängliga utrustning. Skonsamt för ${injuries.join(', ') || 'alla leder'}.`,
+    description: `Ett skräddarsytt ${daysPerWeek}-dagars program optimerat för ${goalDesc} (~${durNum} min/pass). Anpassat för ${location} och din tillgängliga utrustning.`,
     daysPerWeek: daysPerWeek,
     workouts: workouts
   };
