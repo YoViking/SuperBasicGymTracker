@@ -18,13 +18,14 @@ import {
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Image } from 'expo-image';
-import { Play, Pause, SkipForward, SkipBack, Timer, MoreHorizontal, Check, X, Dumbbell, ChevronRight } from 'lucide-react-native';
+import { Play, Pause, SkipForward, SkipBack, Timer, MoreHorizontal, Check, X, Dumbbell, ChevronRight, CircleQuestionMark, Pencil, Plus, RotateCcw } from 'lucide-react-native';
 import { Audio } from 'expo-av';
 import * as Notifications from 'expo-notifications';
 import { activateKeepAwakeAsync, deactivateKeepAwake } from 'expo-keep-awake';
 import { getMuscleGroupImage } from '../utils/images';
 import { getRestTimerInterval, getKeepAwakeSetting } from '../utils/settings';
 import { getBottomNavLayout } from '../utils/layout';
+import GuideModal, { GuideStepItem } from './GuideModal';
 
 Notifications.setNotificationHandler({
   handleNotification: async () => ({
@@ -37,6 +38,59 @@ Notifications.setNotificationHandler({
 });
 
 const { width, height: SCREEN_HEIGHT } = Dimensions.get('window');
+
+const WORKOUT_GUIDE_ITEMS: GuideStepItem[] = [
+  {
+    icon: Pencil,
+    iconColor: '#A3E635',
+    iconBgColor: 'rgba(163, 230, 53, 0.12)',
+    badge: 'Långtryck',
+    badgeBgColor: 'rgba(163, 230, 53, 0.15)',
+    badgeTextColor: '#A3E635',
+    title: 'Ändra reps & vikt',
+    description: 'Håll ned fingret på raden med reps och vikt för att snabbt ändra siffrorna för det specifika setet.',
+  },
+  {
+    icon: Timer,
+    iconColor: '#38BDF8',
+    iconBgColor: 'rgba(56, 189, 248, 0.12)',
+    badge: 'Tryck',
+    badgeBgColor: 'rgba(56, 189, 248, 0.15)',
+    badgeTextColor: '#38BDF8',
+    title: 'Starta vilotimer',
+    description: 'Tryck på timer-ikonen längst ner till höger för att starta nedräkning av vilotiden mellan seten.',
+  },
+  {
+    icon: Plus,
+    iconColor: '#F59E0B',
+    iconBgColor: 'rgba(245, 158, 11, 0.12)',
+    badge: 'Fler tryck',
+    badgeBgColor: 'rgba(245, 158, 11, 0.15)',
+    badgeTextColor: '#F59E0B',
+    title: 'Addera mer vilotid',
+    description: 'Tryck på timern igen medan den tickar för att lägga till mer vilotid (t.ex. +30 sek per tryck).',
+  },
+  {
+    icon: RotateCcw,
+    iconColor: '#EF4444',
+    iconBgColor: 'rgba(239, 68, 68, 0.12)',
+    badge: 'Långtryck',
+    badgeBgColor: 'rgba(239, 68, 68, 0.15)',
+    badgeTextColor: '#EF4444',
+    title: 'Avbryt vilotimer',
+    description: 'Håll ned fingret på timer-ikonen för att direkt nollställa och avbryta den pågående vilotimern.',
+  },
+  {
+    icon: Check,
+    iconColor: '#A3E635',
+    iconBgColor: 'rgba(163, 230, 53, 0.12)',
+    badge: 'Tryck',
+    badgeBgColor: 'rgba(163, 230, 53, 0.15)',
+    badgeTextColor: '#A3E635',
+    title: 'Klarmarkera set',
+    description: 'Klicka i bockrutan för varje genomfört set. När alla set i en övning är klara växlar spelaren automatiskt vidare till nästa övning.',
+  },
+];
 
 interface WorkoutPlayerProps {
   activeExercise: any; // Using any here to avoid cyclic imports, or we can just pass the necessary data
@@ -87,6 +141,7 @@ export default function WorkoutPlayer({
   const [editingSetId, setEditingSetId] = useState<string | null>(null);
   const [editReps, setEditReps] = useState<string>('');
   const [editWeight, setEditWeight] = useState<string>('');
+  const [helpModalVisible, setHelpModalVisible] = useState(false);
 
   // Bottom sheet animation & modal visibility state
   const [modalVisible, setModalVisible] = useState(isExpanded);
@@ -123,6 +178,10 @@ export default function WorkoutPlayer({
   // Handle hardware back button on Android
   useEffect(() => {
     const onBackPress = () => {
+      if (helpModalVisible) {
+        setHelpModalVisible(false);
+        return true;
+      }
       if (modalVisible || isExpanded) {
         if (editingSetId) {
           handleCancelEdit();
@@ -142,7 +201,7 @@ export default function WorkoutPlayer({
     return () => {
       backHandlerSubscription.remove();
     };
-  }, [modalVisible, isExpanded, editingSetId]);
+  }, [modalVisible, isExpanded, editingSetId, helpModalVisible]);
 
   useEffect(() => {
     if (isExpanded) {
@@ -569,10 +628,18 @@ export default function WorkoutPlayer({
             >
               {/* Top Drag & Header Zone */}
               <View style={styles.dragHeaderZone}>
-                <View style={styles.dragHandleContainer}>
+                <View style={styles.sheetTopBar}>
+                  <View style={styles.topBarSpacer} />
                   <View style={styles.dragHandle} />
+                  <TouchableOpacity
+                    style={styles.helpButton}
+                    onPress={() => setHelpModalVisible(true)}
+                    hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
+                    activeOpacity={0.7}
+                  >
+                    <CircleQuestionMark size={18} color="#94A3B8" />
+                  </TouchableOpacity>
                 </View>
-
 
                 {/* Dedicated Image Drag Zone with instant touch capture */}
                 <View 
@@ -794,6 +861,15 @@ export default function WorkoutPlayer({
           </KeyboardAvoidingView>
         </View>
       )}
+
+      {/* Help / Guide Modal */}
+      <GuideModal
+        visible={helpModalVisible}
+        onClose={() => setHelpModalVisible(false)}
+        title="Så fungerar Workout Player"
+        subtitle="Tips & snabbkommandon för ditt träningspass"
+        items={WORKOUT_GUIDE_ITEMS}
+      />
     </>
   );
 }
@@ -875,17 +951,33 @@ const styles = StyleSheet.create({
   dragHeaderZone: {
     paddingTop: 4,
   },
-  dragHandleContainer: {
-    width: '100%',
+  sheetTopBar: {
+    flexDirection: 'row',
     alignItems: 'center',
-    paddingTop: 6,
-    paddingBottom: 10,
+    justifyContent: 'space-between',
+    paddingHorizontal: 16,
+    paddingTop: 4,
+    paddingBottom: 8,
+  },
+  topBarSpacer: {
+    width: 32,
+    height: 32,
   },
   dragHandle: {
     width: 44,
     height: 5,
     backgroundColor: '#3F3F46',
     borderRadius: 3,
+  },
+  helpButton: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: '#18181B',
+    borderWidth: 1,
+    borderColor: '#27272A',
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   imageDragZone: {
     width: '100%',
