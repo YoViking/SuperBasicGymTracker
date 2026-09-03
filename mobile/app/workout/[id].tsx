@@ -1,4 +1,4 @@
-import React, { useState, useCallback, useMemo } from 'react';
+import React, { useState, useCallback, useMemo, useEffect } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, ActivityIndicator, Platform, FlatList, ListRenderItemInfo } from 'react-native';
 import { Image } from 'expo-image';
 import { useLocalSearchParams, useRouter, useFocusEffect } from 'expo-router';
@@ -24,6 +24,7 @@ export default function WorkoutDetailScreen() {
     finishWorkout,
     openExerciseOptions,
     refreshWorkoutExercises,
+    workoutUpdateSeq,
     isSaving: sessionSaving,
     isWorkoutActive,
     setIsWorkoutActive,
@@ -44,6 +45,12 @@ export default function WorkoutDetailScreen() {
       fetchData();
     }, [id])
   );
+
+  useEffect(() => {
+    if (workoutUpdateSeq > 0) {
+      fetchData();
+    }
+  }, [workoutUpdateSeq]);
 
   const fetchData = async () => {
     if (!id) return;
@@ -207,41 +214,47 @@ export default function WorkoutDetailScreen() {
     const isPlaying = activeExerciseId === group.exerciseId;
 
     return (
-      <TouchableOpacity 
-        style={[styles.exerciseCard, isPlaying && styles.playingCard]}
-        activeOpacity={0.9}
-        onPress={() => {
-          if (!isCurrentActiveWorkout) {
-            if (localWorkout && localExercises.length > 0) {
-              startWorkout(localWorkout, localExercises, group.exerciseId);
+      <View style={[styles.exerciseCard, isPlaying && styles.playingCard]}>
+        <TouchableOpacity 
+          style={styles.cardMainClickable}
+          activeOpacity={0.8}
+          onPress={() => {
+            if (!isCurrentActiveWorkout) {
+              if (localWorkout && localExercises.length > 0) {
+                startWorkout(localWorkout, localExercises, group.exerciseId);
+              }
+            } else {
+              setActiveExerciseId(group.exerciseId);
             }
-          } else {
-            setActiveExerciseId(group.exerciseId);
-          }
-          setIsPlayerExpanded(true);
-        }}
-      >
-        <View style={styles.cardLeft}>
-          {group.gifUrl ? (
-            <Image source={{ uri: group.gifUrl }} style={styles.thumbnail} contentFit="cover" autoplay={false} />
-          ) : (
-            <Image source={getMuscleGroupImage(group.muscleGroup)} style={styles.thumbnail} contentFit="contain" autoplay={false} />
-          )}
-        </View>
-        <View style={styles.cardRight}>
-          <View style={styles.cardTopRow}>
-            <Text style={styles.cardTitle}>{group.sets[0]?.custom_name || group.exerciseName}</Text>
-            <TouchableOpacity 
-              style={styles.kebabMenu} 
-              onPress={() => openExerciseOptions(group.exerciseId, id)}
-              activeOpacity={0.7}
-              hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
-            >
-              <MoreVertical size={20} color="#94A3B8" />
-            </TouchableOpacity>
+            setIsPlayerExpanded(true);
+          }}
+        >
+          <View style={styles.cardLeft}>
+            {group.gifUrl ? (
+              <Image source={{ uri: group.gifUrl }} style={styles.thumbnail} contentFit="cover" autoplay={false} />
+            ) : (
+              <Image source={getMuscleGroupImage(group.muscleGroup)} style={styles.thumbnail} contentFit="contain" autoplay={false} />
+            )}
           </View>
-        </View>
-      </TouchableOpacity>
+          <View style={styles.cardRight}>
+            <Text style={styles.cardTitle} numberOfLines={2}>
+              {group.sets[0]?.custom_name || group.exerciseName}
+            </Text>
+          </View>
+        </TouchableOpacity>
+
+        <TouchableOpacity 
+          style={styles.kebabMenu} 
+          onPress={(e) => {
+            e?.stopPropagation?.();
+            openExerciseOptions(group.exerciseId, id, group.muscleGroup);
+          }}
+          activeOpacity={0.6}
+          hitSlop={{ top: 16, bottom: 16, left: 16, right: 16 }}
+        >
+          <MoreVertical size={20} color="#94A3B8" />
+        </TouchableOpacity>
+      </View>
     );
   };
 
@@ -457,7 +470,13 @@ const styles = StyleSheet.create({
     marginHorizontal: 16,
     marginBottom: 12,
     flexDirection: 'row',
+    alignItems: 'center',
     overflow: 'hidden',
+  },
+  cardMainClickable: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
   },
   activeCard: {
     shadowColor: '#000',
@@ -474,8 +493,10 @@ const styles = StyleSheet.create({
   },
   cardLeft: {
     width: 80,
+    height: 80,
     backgroundColor: '#F8FAFC',
     alignItems: 'center',
+    justifyContent: 'center',
   },
   thumbnail: {
     width: 80,
@@ -483,22 +504,19 @@ const styles = StyleSheet.create({
   },
   cardRight: {
     flex: 1,
-    padding: 12,
+    paddingHorizontal: 12,
     justifyContent: 'center',
-  },
-  cardTopRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
   },
   cardTitle: {
     color: '#F8FAFC',
     fontSize: 16,
     fontWeight: '600',
-    flex: 1,
   },
   kebabMenu: {
-    padding: 4,
+    paddingHorizontal: 14,
+    paddingVertical: 24,
+    justifyContent: 'center',
+    alignItems: 'center',
   },
   setsList: {
     gap: 4,

@@ -16,7 +16,7 @@ export default function ReplaceExerciseScreen() {
   }>();
   
   const router = useRouter();
-  const { activeWorkout, refreshWorkoutExercises } = useWorkoutSession();
+  const { activeWorkout, refreshWorkoutExercises, triggerWorkoutUpdate } = useWorkoutSession();
   const [isReplacing, setIsReplacing] = useState(false);
 
   const handleReplace = async (newExercise: Exercise) => {
@@ -46,6 +46,8 @@ export default function ReplaceExerciseScreen() {
       if (activeWorkout && activeWorkout.id === workoutId) {
         await refreshWorkoutExercises(workoutId, newExercise.id);
       }
+
+      triggerWorkoutUpdate();
 
       if (Platform.OS === 'android') {
         ToastAndroid.show('Övning utbytt', ToastAndroid.SHORT);

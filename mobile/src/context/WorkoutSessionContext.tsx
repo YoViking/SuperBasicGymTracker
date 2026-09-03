@@ -62,13 +62,15 @@ interface WorkoutSessionContextType {
   handleUpdateSet: (setId: string, reps: number, weight: number) => Promise<void>;
   finishWorkout: () => Promise<void>;
   discardWorkout: () => void;
-  openExerciseOptions: (exerciseId: string, workoutId?: string) => void;
+  openExerciseOptions: (exerciseId: string, workoutId?: string, muscleGroup?: string) => void;
   closeExerciseOptions: () => void;
   handleGoToExercise: () => void;
   handleChangeExercise: () => void;
   handleRemoveExerciseFromWorkout: () => Promise<void>;
   handleCloseSummary: () => void;
   refreshWorkoutExercises: (targetWorkoutId?: string, nextExerciseId?: string) => Promise<void>;
+  workoutUpdateSeq: number;
+  triggerWorkoutUpdate: () => void;
 }
 
 const WorkoutSessionContext = createContext<WorkoutSessionContextType | undefined>(undefined);
@@ -90,6 +92,12 @@ export function WorkoutSessionProvider({ children }: { children: React.ReactNode
   const [optionsModalVisible, setOptionsModalVisible] = useState(false);
   const [optionsExerciseId, setOptionsExerciseId] = useState<string | null>(null);
   const [optionsWorkoutId, setOptionsWorkoutId] = useState<string | null>(null);
+  const [optionsMuscleGroup, setOptionsMuscleGroup] = useState<string | null>(null);
+  const [workoutUpdateSeq, setWorkoutUpdateSeq] = useState(0);
+
+  const triggerWorkoutUpdate = useCallback(() => {
+    setWorkoutUpdateSeq(prev => prev + 1);
+  }, []);
 
   // Timer reference & handling
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -289,9 +297,10 @@ export function WorkoutSessionProvider({ children }: { children: React.ReactNode
     }
   }, [activeWorkout?.id, groupedExercises, activeExerciseId]);
 
-  const openExerciseOptions = useCallback((exerciseId: string, workoutId?: string) => {
+  const openExerciseOptions = useCallback((exerciseId: string, workoutId?: string, muscleGroup?: string) => {
     setOptionsExerciseId(exerciseId);
     setOptionsWorkoutId(workoutId || activeWorkout?.id || null);
+    setOptionsMuscleGroup(muscleGroup || null);
     setOptionsModalVisible(true);
   }, [activeWorkout?.id]);
 
@@ -299,6 +308,7 @@ export function WorkoutSessionProvider({ children }: { children: React.ReactNode
     setOptionsModalVisible(false);
     setOptionsExerciseId(null);
     setOptionsWorkoutId(null);
+    setOptionsMuscleGroup(null);
   }, []);
 
   const handleGoToExercise = useCallback(() => {
@@ -314,12 +324,12 @@ export function WorkoutSessionProvider({ children }: { children: React.ReactNode
     const targetWorkoutId = optionsWorkoutId || activeWorkout?.id;
     if (optionsExerciseId && targetWorkoutId) {
       const activeEx = groupedExercises.find(g => g.exerciseId === optionsExerciseId);
-      const muscleGroup = activeEx ? activeEx.muscleGroup : '';
+      const muscleGroup = optionsMuscleGroup || activeEx?.muscleGroup || '';
       setIsPlayerExpanded(false);
       closeExerciseOptions();
       router.push(`/workout/replace/${targetWorkoutId}/${optionsExerciseId}?muscleGroup=${encodeURIComponent(muscleGroup)}`);
     }
-  }, [optionsExerciseId, optionsWorkoutId, activeWorkout, groupedExercises, router, closeExerciseOptions]);
+  }, [optionsExerciseId, optionsWorkoutId, optionsMuscleGroup, activeWorkout, groupedExercises, router, closeExerciseOptions]);
 
   const handleRemoveExerciseFromWorkout = useCallback(async () => {
     const targetWorkoutId = optionsWorkoutId || activeWorkout?.id;
@@ -348,6 +358,8 @@ export function WorkoutSessionProvider({ children }: { children: React.ReactNode
           setActiveExerciseId(remaining.length > 0 ? remaining[0].exerciseId : null);
         }
       }
+
+      setWorkoutUpdateSeq(prev => prev + 1);
       
       if (Platform.OS === 'android') {
         ToastAndroid.show('Övning borttagen', ToastAndroid.SHORT);
@@ -510,6 +522,8 @@ export function WorkoutSessionProvider({ children }: { children: React.ReactNode
         handleRemoveExerciseFromWorkout,
         handleCloseSummary,
         refreshWorkoutExercises,
+        workoutUpdateSeq,
+        triggerWorkoutUpdate,
       }}
     >
       {children}
