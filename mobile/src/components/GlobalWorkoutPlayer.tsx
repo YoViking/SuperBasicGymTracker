@@ -45,16 +45,6 @@ export default function GlobalWorkoutPlayer() {
     }
   };
 
-  if (!activeExercise) {
-    return (
-      <WorkoutSummaryModal
-        visible={summaryModalVisible}
-        summary={summaryData}
-        onClose={handleCloseSummary}
-      />
-    );
-  }
-
   // Calculate bottom offset according to current screen's bottom nav
   const segs = segments as string[];
   const isTabsScreen = segs[0] === '(tabs)';
@@ -71,25 +61,27 @@ export default function GlobalWorkoutPlayer() {
 
   return (
     <>
-      <WorkoutPlayer
-        activeExercise={activeExercise}
-        workoutName={activeWorkout?.name}
-        onWorkoutTitlePress={handleWorkoutTitlePress}
-        isExpanded={isPlayerExpanded}
-        setIsExpanded={setIsPlayerExpanded}
-        onNext={handleNextExercise}
-        onPrevious={handlePreviousExercise}
-        onToggleSet={toggleSetStatus}
-        onUpdateSet={handleUpdateSet}
-        workoutTimeElapsed={workoutTimeElapsed}
-        isWorkoutActive={isWorkoutActive}
-        setIsWorkoutActive={setIsWorkoutActive}
-        progressPercentage={progressPercentage}
-        onOptionsPress={() => openExerciseOptions(activeExercise.exerciseId)}
-        bottomNavHeight={bottomNavHeight}
-        hasBottomNav={hasBottomNav}
-        hideMiniPlayer={isExerciseOrReplaceScreen}
-      />
+      {activeExercise && (
+        <WorkoutPlayer
+          activeExercise={activeExercise}
+          workoutName={activeWorkout?.name}
+          onWorkoutTitlePress={handleWorkoutTitlePress}
+          isExpanded={isPlayerExpanded}
+          setIsExpanded={setIsPlayerExpanded}
+          onNext={handleNextExercise}
+          onPrevious={handlePreviousExercise}
+          onToggleSet={toggleSetStatus}
+          onUpdateSet={handleUpdateSet}
+          workoutTimeElapsed={workoutTimeElapsed}
+          isWorkoutActive={isWorkoutActive}
+          setIsWorkoutActive={setIsWorkoutActive}
+          progressPercentage={progressPercentage}
+          onOptionsPress={() => openExerciseOptions(activeExercise.exerciseId)}
+          bottomNavHeight={bottomNavHeight}
+          hasBottomNav={hasBottomNav}
+          hideMiniPlayer={isExerciseOrReplaceScreen}
+        />
+      )}
 
       {/* Options Bottom Sheet */}
       <Modal
@@ -120,27 +112,31 @@ export default function GlobalWorkoutPlayer() {
               <Text style={styles.optionTextRed}>Ta bort övning från workout</Text>
             </TouchableOpacity>
 
-            <TouchableOpacity 
-              style={[styles.optionRow, { borderTopWidth: 1, borderTopColor: '#27272A', marginTop: 8, paddingTop: 16 }]} 
-              onPress={() => {
-                closeExerciseOptions();
-                finishWorkout();
-              }}
-            >
-              <CheckCircle2 size={24} color="#A3E635" />
-              <Text style={styles.optionText}>Slutför Workout</Text>
-            </TouchableOpacity>
+            {Boolean(activeWorkout) && (
+              <>
+                <TouchableOpacity 
+                  style={[styles.optionRow, { borderTopWidth: 1, borderTopColor: '#27272A', marginTop: 8, paddingTop: 16 }]} 
+                  onPress={() => {
+                    closeExerciseOptions();
+                    finishWorkout();
+                  }}
+                >
+                  <CheckCircle2 size={24} color="#A3E635" />
+                  <Text style={styles.optionText}>Slutför Workout</Text>
+                </TouchableOpacity>
 
-            <TouchableOpacity 
-              style={styles.optionRow} 
-              onPress={() => {
-                closeExerciseOptions();
-                discardWorkout();
-              }}
-            >
-              <XCircle size={24} color="#94A3B8" />
-              <Text style={styles.optionTextWhite}>Avbryt träningspass</Text>
-            </TouchableOpacity>
+                <TouchableOpacity 
+                  style={styles.optionRow} 
+                  onPress={() => {
+                    closeExerciseOptions();
+                    discardWorkout();
+                  }}
+                >
+                  <XCircle size={24} color="#94A3B8" />
+                  <Text style={styles.optionTextWhite}>Avbryt träningspass</Text>
+                </TouchableOpacity>
+              </>
+            )}
           </View>
         </View>
       </Modal>
