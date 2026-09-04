@@ -7,12 +7,14 @@ import ExerciseLibrary from '../../../../src/components/ExerciseLibrary';
 import { supabase } from '../../../../src/lib/supabase';
 import { ExerciseLibrary as Exercise } from '../../../../src/types';
 import { useWorkoutSession } from '../../../../src/context/WorkoutSessionContext';
+import { getExerciseTarget } from '../../../../src/utils/muscleHierarchy';
 
 export default function ReplaceExerciseScreen() {
-  const { workoutId, oldExerciseId, muscleGroup } = useLocalSearchParams<{
+  const { workoutId, oldExerciseId, muscleGroup, targetMuscle } = useLocalSearchParams<{
     workoutId: string;
     oldExerciseId: string;
     muscleGroup: string;
+    targetMuscle?: string;
   }>();
   
   const router = useRouter();
@@ -74,11 +76,20 @@ export default function ReplaceExerciseScreen() {
       </View>
       
       <View style={styles.container}>
-        <ExerciseLibrary 
-          replaceMode={true} 
-          defaultFilter={muscleGroup || 'Alla'} 
-          onReplaceSelect={handleReplace}
-        />
+        {(() => {
+          const fallbackTarget = oldExerciseId ? getExerciseTarget(oldExerciseId) : null;
+          const resolvedGroup = muscleGroup || fallbackTarget?.mainGroup || 'Alla';
+          const resolvedSubFilter = targetMuscle || fallbackTarget?.target || undefined;
+
+          return (
+            <ExerciseLibrary 
+              replaceMode={true} 
+              defaultFilter={resolvedGroup} 
+              defaultSubFilter={resolvedSubFilter}
+              onReplaceSelect={handleReplace}
+            />
+          );
+        })()}
         
         {isReplacing && (
           <View style={styles.loadingOverlay}>

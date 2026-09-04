@@ -7,6 +7,7 @@ import { calculateSetVolume, getUserBodyWeight } from '../utils/volume';
 import { detectWorkoutRecords } from '../services/recordDetector';
 import { cacheService } from '../services/cacheService';
 import { WorkoutSummaryData } from '../components/WorkoutSummaryModal';
+import { getExerciseTarget } from '../utils/muscleHierarchy';
 
 export interface FetchedWorkoutExercise {
   id: string;
@@ -324,10 +325,12 @@ export function WorkoutSessionProvider({ children }: { children: React.ReactNode
     const targetWorkoutId = optionsWorkoutId || activeWorkout?.id;
     if (optionsExerciseId && targetWorkoutId) {
       const activeEx = groupedExercises.find(g => g.exerciseId === optionsExerciseId);
-      const muscleGroup = optionsMuscleGroup || activeEx?.muscleGroup || '';
+      const targetInfo = getExerciseTarget(optionsExerciseId, activeEx?.exerciseName);
+      const muscleGroup = optionsMuscleGroup || activeEx?.muscleGroup || targetInfo.mainGroup || '';
+      const targetMuscle = targetInfo.target || '';
       setIsPlayerExpanded(false);
       closeExerciseOptions();
-      router.push(`/workout/replace/${targetWorkoutId}/${optionsExerciseId}?muscleGroup=${encodeURIComponent(muscleGroup)}`);
+      router.push(`/workout/replace/${targetWorkoutId}/${optionsExerciseId}?muscleGroup=${encodeURIComponent(muscleGroup)}&targetMuscle=${encodeURIComponent(targetMuscle)}`);
     }
   }, [optionsExerciseId, optionsWorkoutId, optionsMuscleGroup, activeWorkout, groupedExercises, router, closeExerciseOptions]);
 

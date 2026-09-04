@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useMemo } from 'react';
 import { View, Text, StyleSheet, TextInput, TouchableOpacity, SectionList, ActivityIndicator, Modal, Pressable, ScrollView, Platform, ToastAndroid } from 'react-native';
 import { Image } from 'expo-image';
 import { supabase } from '../lib/supabase';
@@ -6,6 +6,7 @@ import { Search, MoreVertical, Plus, Dumbbell, Bookmark, EyeOff, X, Trophy } fro
 import { ExerciseLibrary as Exercise } from '../types';
 import { useRouter } from 'expo-router';
 import { useBookmarks } from '../hooks/useBookmarks';
+import { getExerciseTarget, getSubMusclesForGroup, normalizeTargetKey, TARGET_DISPLAY_SV } from '../utils/muscleHierarchy';
 
 const MUSCLE_GROUPS = ['All', 'Chest', 'Back', 'Legs', 'Arms', 'Shoulders', 'Core', 'Glutes', 'Other', 'Bookmarked'];
 
@@ -96,18 +97,23 @@ const formatEquipmentLabel = (eq?: string): string => {
 interface ExerciseLibraryProps {
   replaceMode?: boolean;
   defaultFilter?: string;
+  defaultSubFilter?: string;
   onReplaceSelect?: (exercise: Exercise) => void;
 }
 
 export default function ExerciseLibrary({
   replaceMode = false,
   defaultFilter = 'All',
+  defaultSubFilter,
   onReplaceSelect
 }: ExerciseLibraryProps = {}) {
   const [exercises, setExercises] = useState<Exercise[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
   const [activeMuscleFilter, setActiveMuscleFilter] = useState(defaultFilter);
+  const [activeSubFilter, setActiveSubFilter] = useState<string>(
+    defaultSubFilter ? normalizeTargetKey(defaultSubFilter) : 'All'
+  );
   const [activeEquipmentFilter, setActiveEquipmentFilter] = useState('All');
   const [selectedExercise, setSelectedExercise] = useState<Exercise | null>(null);
   const router = useRouter();
@@ -116,6 +122,18 @@ export default function ExerciseLibrary({
   useEffect(() => {
     fetchExercises();
   }, []);
+
+  useEffect(() => {
+    if (defaultFilter) {
+      setActiveMuscleFilter(defaultFilter);
+    }
+  }, [defaultFilter]);
+
+  useEffect(() => {
+    if (defaultSubFilter) {
+      setActiveSubFilter(normalizeTargetKey(defaultSubFilter));
+    }
+  }, [defaultSubFilter]);
 
   const fetchExercises = async () => {
     try {
@@ -131,7 +149,18 @@ export default function ExerciseLibrary({
         return;
       }
 
-      setExercises(data || []);
+      const enriched = (data || []).map((ex: Exercise) => {
+        const info = getExerciseTarget(ex.id, ex.name);
+        const target = ex.target_muscle || info.target;
+        return {
+          ...ex,
+          target_muscle: target,
+          target_muscle_sv: ex.target_muscle_sv || TARGET_DISPLAY_SV[target] || info.targetSv,
+          muscle_group: ex.muscle_group || info.mainGroup,
+        };
+      });
+
+      setExercises(enriched);
     } catch (error) {
       console.error('Error:', error);
     } finally {
@@ -142,8 +171,18 @@ export default function ExerciseLibrary({
   const handleMuscleSelect = (group: string) => {
     if (activeMuscleFilter === group) {
       setActiveMuscleFilter('All');
+      setActiveSubFilter('All');
     } else {
       setActiveMuscleFilter(group);
+      setActiveSubFilter('All');
+    }
+  };
+
+  const handleSubMuscleSelect = (subId: string) => {
+    if (activeSubFilter === subId) {
+      setActiveSubFilter('All');
+    } else {
+      setActiveSubFilter(subId);
     }
   };
 
@@ -153,6 +192,21 @@ export default function ExerciseLibrary({
     } else {
       setActiveEquipmentFilter(eqId);
     }
+  };
+
+  const currentSubMuscles = useMemo(() => {
+    if (activeMuscleFilter === 'All' || activeMuscleFilter === 'Alla' || activeMuscleFilter === 'Bookmarked') {
+      return [];
+    }
+    return getSubMusclesForGroup(activeMuscleFilter);
+  }, [activeMuscleFilter]);
+
+  const isMuscleGroupActive = (group: string) => {
+    if (activeMuscleFilter === group) return true;
+    if (group === 'All' && (activeMuscleFilter === 'Alla' || !activeMuscleFilter)) return true;
+    if (MUSCLE_GROUP_DISPLAY[group] && MUSCLE_GROUP_DISPLAY[group] === activeMuscleFilter) return true;
+    if (MUSCLE_GROUP_DISPLAY[activeMuscleFilter] && MUSCLE_GROUP_DISPLAY[activeMuscleFilter] === group) return true;
+    return false;
   };
 
   const getFilteredData = () => {
@@ -166,21 +220,40 @@ export default function ExerciseLibrary({
     if (activeMuscleFilter === 'Bookmarked') {
       filtered = filtered.filter(e => isBookmarked(e.id));
     } else if (activeMuscleFilter !== 'All' && activeMuscleFilter !== 'Alla') {
-      filtered = filtered.filter(e => e.muscle_group === activeMuscleFilter);
+      filtered = filtered.filter(e => {
+        const g = e.muscle_group || 'Other';
+        return g === activeMuscleFilter || MUSCLE_GROUP_DISPLAY[g] === activeMuscleFilter;
+      });
+    }
+
+    if (activeSubFilter !== 'All' && activeSubFilter !== 'Alla') {
+      const targetQuery = activeSubFilter.toLowerCase().trim();
+      filtered = filtered.filter(e => {
+        const t = (e.target_muscle || '').toLowerCase().trim();
+        return t === targetQuery;
+      });
     }
 
     if (activeEquipmentFilter !== 'All' && activeEquipmentFilter !== 'Alla') {
       filtered = filtered.filter(e => matchesEquipmentFilter(e, activeEquipmentFilter));
     }
 
-    // Group by muscle_group for the SectionList
+    // Group by muscle_group for the SectionList (or specific target if single group is selected)
+    const isSingleMainGroup = activeMuscleFilter !== 'All' && activeMuscleFilter !== 'Alla' && activeMuscleFilter !== 'Bookmarked';
+
     const grouped = filtered.reduce((acc, curr) => {
-      const rawGroup = curr.muscle_group || 'Other';
-      const group = MUSCLE_GROUP_DISPLAY[rawGroup] || rawGroup;
-      if (!acc[group]) {
-        acc[group] = [];
+      let groupTitle = '';
+      if (isSingleMainGroup && curr.target_muscle_sv) {
+        groupTitle = curr.target_muscle_sv;
+      } else {
+        const rawGroup = curr.muscle_group || 'Other';
+        groupTitle = MUSCLE_GROUP_DISPLAY[rawGroup] || rawGroup;
       }
-      acc[group].push(curr);
+
+      if (!acc[groupTitle]) {
+        acc[groupTitle] = [];
+      }
+      acc[groupTitle].push(curr);
       return acc;
     }, {} as Record<string, Exercise[]>);
 
@@ -231,6 +304,13 @@ export default function ExerciseLibrary({
           )}
         </View>
         <View style={styles.exerciseMetaRow}>
+          {item.target_muscle_sv ? (
+            <View style={styles.targetBadge}>
+              <Text style={styles.targetBadgeText} numberOfLines={1}>
+                {item.target_muscle_sv}
+              </Text>
+            </View>
+          ) : null}
           {item.equipment ? (
             <View style={styles.equipmentBadge}>
               <Text style={styles.equipmentBadgeText} numberOfLines={1}>
@@ -286,7 +366,7 @@ export default function ExerciseLibrary({
             contentContainerStyle={styles.filterScrollContent}
           >
             {MUSCLE_GROUPS.map(group => {
-              const isActive = activeMuscleFilter === group || (group === 'All' && activeMuscleFilter === 'Alla');
+              const isActive = isMuscleGroupActive(group);
               return (
                 <TouchableOpacity
                   key={group}
@@ -302,6 +382,51 @@ export default function ExerciseLibrary({
             })}
           </ScrollView>
         </View>
+
+        {/* Specific Muscle Sub-filter */}
+        {currentSubMuscles.length > 0 && (
+          <View style={styles.filterSection}>
+            <Text style={styles.filterCategoryLabel}>SPECIFIK MUSKEL</Text>
+            <ScrollView
+              horizontal
+              showsHorizontalScrollIndicator={false}
+              contentContainerStyle={styles.filterScrollContent}
+            >
+              <TouchableOpacity
+                style={[
+                  styles.filterChip,
+                  (activeSubFilter === 'All' || activeSubFilter === 'Alla') && styles.activeFilterChip
+                ]}
+                onPress={() => setActiveSubFilter('All')}
+                activeOpacity={0.7}
+              >
+                <Text
+                  style={[
+                    styles.filterText,
+                    (activeSubFilter === 'All' || activeSubFilter === 'Alla') && styles.activeFilterText
+                  ]}
+                >
+                  Alla
+                </Text>
+              </TouchableOpacity>
+              {currentSubMuscles.map(sub => {
+                const isActive = activeSubFilter.toLowerCase() === sub.id.toLowerCase();
+                return (
+                  <TouchableOpacity
+                    key={sub.id}
+                    style={[styles.filterChip, isActive && styles.activeFilterChip]}
+                    onPress={() => handleSubMuscleSelect(sub.id)}
+                    activeOpacity={0.7}
+                  >
+                    <Text style={[styles.filterText, isActive && styles.activeFilterText]}>
+                      {sub.label}
+                    </Text>
+                  </TouchableOpacity>
+                );
+              })}
+            </ScrollView>
+          </View>
+        )}
 
         {/* Equipment Filter */}
         <View style={styles.filterSection}>
@@ -593,6 +718,19 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 8,
+  },
+  targetBadge: {
+    backgroundColor: '#1E293B',
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 4,
+    borderWidth: 1,
+    borderColor: '#334155',
+  },
+  targetBadgeText: {
+    color: '#A3E635',
+    fontSize: 11,
+    fontWeight: '600',
   },
   equipmentBadge: {
     backgroundColor: '#1E293B',
