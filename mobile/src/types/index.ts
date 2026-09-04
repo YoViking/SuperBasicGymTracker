@@ -48,6 +48,8 @@ export interface ExerciseLibrary {
   id: string;
   name: string;
   muscle_group?: string;
+  target_muscle?: string;
+  target_muscle_sv?: string;
   link?: string;
   gifUrl?: string;
   completions_count?: number;
