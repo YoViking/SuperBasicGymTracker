@@ -114,8 +114,8 @@ export default function GlobalWorkoutPlayer() {
 
             {Boolean(activeWorkout) && (
               <>
-                <TouchableOpacity 
-                  style={[styles.optionRow, { borderTopWidth: 1, borderTopColor: '#27272A', marginTop: 8, paddingTop: 16 }]} 
+                <TouchableOpacity
+                  style={[styles.optionRow, { borderTopWidth: 1, borderTopColor: '#27272A', marginTop: 8, paddingTop: 16 }]}
                   onPress={() => {
                     closeExerciseOptions();
                     finishWorkout();
@@ -125,8 +125,8 @@ export default function GlobalWorkoutPlayer() {
                   <Text style={styles.optionText}>Slutför Workout</Text>
                 </TouchableOpacity>
 
-                <TouchableOpacity 
-                  style={styles.optionRow} 
+                <TouchableOpacity
+                  style={styles.optionRow}
                   onPress={() => {
                     closeExerciseOptions();
                     discardWorkout();
