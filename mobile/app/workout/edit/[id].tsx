@@ -53,17 +53,30 @@ export default function WorkoutEditScreen() {
   );
 
   const fetchData = async () => {
-    if (!id) return;
+    if (!id || id === 'undefined') {
+      setLoading(false);
+      return;
+    }
     try {
       setLoading(true);
       
+      const targetId = Array.isArray(id) ? id[0] : id;
       const { data: workoutData, error: workoutError } = await supabase
         .from('workouts')
         .select('*')
-        .eq('id', id)
-        .single();
+        .eq('id', targetId)
+        .maybeSingle();
         
-      if (workoutError) throw workoutError;
+      if (workoutError) {
+        console.warn('Error fetching workout edit details:', workoutError.message);
+        return;
+      }
+
+      if (!workoutData) {
+        setWorkoutName('');
+        setGroupedExercises([]);
+        return;
+      }
       setWorkoutName(workoutData.name);
 
       const { data: exercisesData, error: exercisesError } = await supabase

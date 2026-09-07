@@ -14,7 +14,11 @@ export default function AppBottomNav({ activeTab = 'workouts' }: AppBottomNavPro
   const insets = useSafeAreaInsets();
 
   const handleNavigate = (route: string) => {
-    router.replace(route as any);
+    if (route === '/(tabs)/exercises') {
+      router.replace({ pathname: '/(tabs)/exercises', params: { mode: 'default' } } as any);
+    } else {
+      router.replace(route as any);
+    }
   };
 
   const { height: navHeight, bottomPadding } = getBottomNavLayout(insets.bottom);

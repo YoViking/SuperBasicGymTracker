@@ -46,6 +46,11 @@ export default function TabLayout() {
       />
       <Tabs.Screen
         name="exercises"
+        listeners={({ navigation }) => ({
+          tabPress: () => {
+            navigation.navigate('exercises', { mode: 'default' });
+          },
+        })}
         options={{
           tabBarIcon: ({ color, size }) => (
             <Search size={size} color={color} />

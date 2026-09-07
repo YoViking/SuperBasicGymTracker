@@ -2,11 +2,12 @@ import React from 'react';
 import { View, StyleSheet, Modal, TouchableOpacity, Text, Platform } from 'react-native';
 import { useSegments, useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { Dumbbell, Repeat, Trash2, CheckCircle2, XCircle } from 'lucide-react-native';
+import { Dumbbell, Repeat, Trash2, CheckCircle2, XCircle, Plus } from 'lucide-react-native';
 import { useWorkoutSession } from '../context/WorkoutSessionContext';
 import { getBottomNavLayout } from '../utils/layout';
 import WorkoutPlayer from './WorkoutPlayer';
 import WorkoutSummaryModal from './WorkoutSummaryModal';
+import WorkoutNameModal from './WorkoutNameModal';
 
 export default function GlobalWorkoutPlayer() {
   const segments = useSegments();
@@ -31,6 +32,9 @@ export default function GlobalWorkoutPlayer() {
     handleGoToExercise,
     handleChangeExercise,
     handleRemoveExerciseFromWorkout,
+    nameModalVisible,
+    openNameModal,
+    closeNameModal,
     finishWorkout,
     discardWorkout,
     summaryModalVisible,
@@ -72,6 +76,7 @@ export default function GlobalWorkoutPlayer() {
           onPrevious={handlePreviousExercise}
           onToggleSet={toggleSetStatus}
           onUpdateSet={handleUpdateSet}
+          onFinishPress={openNameModal}
           workoutTimeElapsed={workoutTimeElapsed}
           isWorkoutActive={isWorkoutActive}
           setIsWorkoutActive={setIsWorkoutActive}
@@ -102,6 +107,21 @@ export default function GlobalWorkoutPlayer() {
               <Text style={styles.optionText}>Gå till övning</Text>
             </TouchableOpacity>
 
+            <TouchableOpacity
+              style={styles.optionRow}
+              onPress={() => {
+                closeExerciseOptions();
+                setIsPlayerExpanded(false);
+                router.push({
+                  pathname: '/(tabs)/exercises',
+                  params: { mode: 'add_to_workout' },
+                });
+              }}
+            >
+              <Plus size={24} color="#38BDF8" />
+              <Text style={[styles.optionText, { color: '#38BDF8' }]}>Lägg till övning i passet</Text>
+            </TouchableOpacity>
+
             <TouchableOpacity style={styles.optionRow} onPress={handleChangeExercise}>
               <Repeat size={24} color="#F8FAFC" />
               <Text style={styles.optionTextWhite}>Byt övning</Text>
@@ -118,7 +138,7 @@ export default function GlobalWorkoutPlayer() {
                   style={[styles.optionRow, { borderTopWidth: 1, borderTopColor: '#27272A', marginTop: 8, paddingTop: 16 }]}
                   onPress={() => {
                     closeExerciseOptions();
-                    finishWorkout();
+                    openNameModal();
                   }}
                 >
                   <CheckCircle2 size={24} color="#A3E635" />
@@ -140,6 +160,14 @@ export default function GlobalWorkoutPlayer() {
           </View>
         </View>
       </Modal>
+
+      {/* Workout Name Prompt Modal before saving */}
+      <WorkoutNameModal
+        visible={nameModalVisible}
+        defaultName={activeWorkout?.name}
+        onSave={(customName) => finishWorkout(customName)}
+        onClose={closeNameModal}
+      />
 
       {/* Workout Completion Summary Card */}
       <WorkoutSummaryModal

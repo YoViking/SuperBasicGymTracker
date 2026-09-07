@@ -1,11 +1,12 @@
-import React, { useEffect, useState, useMemo } from 'react';
-import { View, Text, StyleSheet, TextInput, TouchableOpacity, SectionList, ActivityIndicator, Modal, Pressable, ScrollView, Platform, ToastAndroid } from 'react-native';
+import React, { useEffect, useState, useMemo, useRef, useCallback } from 'react';
+import { View, Text, StyleSheet, TextInput, TouchableOpacity, SectionList, ActivityIndicator, Modal, Pressable, ScrollView, Platform, ToastAndroid, Animated } from 'react-native';
 import { Image } from 'expo-image';
 import { supabase } from '../lib/supabase';
 import { Search, MoreVertical, Plus, Dumbbell, Bookmark, EyeOff, X, Trophy } from 'lucide-react-native';
 import { ExerciseLibrary as Exercise } from '../types';
-import { useRouter } from 'expo-router';
+import { useRouter, useLocalSearchParams } from 'expo-router';
 import { useBookmarks } from '../hooks/useBookmarks';
+import { useWorkoutSession } from '../context/WorkoutSessionContext';
 import { getExerciseTarget, getSubMusclesForGroup, normalizeTargetKey, TARGET_DISPLAY_SV } from '../utils/muscleHierarchy';
 
 const MUSCLE_GROUPS = ['All', 'Chest', 'Back', 'Legs', 'Arms', 'Shoulders', 'Core', 'Glutes', 'Other', 'Bookmarked'];
@@ -94,8 +95,11 @@ const formatEquipmentLabel = (eq?: string): string => {
   }
 };
 
+export type ExerciseLibraryMode = 'default' | 'replace' | 'quick_start' | 'add_to_workout';
+
 interface ExerciseLibraryProps {
   replaceMode?: boolean;
+  mode?: ExerciseLibraryMode;
   defaultFilter?: string;
   defaultSubFilter?: string;
   onReplaceSelect?: (exercise: Exercise) => void;
@@ -103,10 +107,78 @@ interface ExerciseLibraryProps {
 
 export default function ExerciseLibrary({
   replaceMode = false,
+  mode,
   defaultFilter = 'All',
   defaultSubFilter,
   onReplaceSelect
 }: ExerciseLibraryProps = {}) {
+  const router = useRouter();
+  const searchParams = useLocalSearchParams<{ mode?: string; t?: string }>();
+  const { startQuickWorkout, addExerciseToActiveWorkout, isSaving } = useWorkoutSession();
+
+  const [toastMessage, setToastMessage] = useState<string | null>(null);
+  const toastAnim = useRef(new Animated.Value(0)).current;
+  const lastToastTimestamp = useRef<string | null>(null);
+
+  const showToast = useCallback((message: string) => {
+    if (Platform.OS === 'android') {
+      ToastAndroid.show(message, ToastAndroid.LONG);
+    } else {
+      setToastMessage(message);
+      toastAnim.setValue(0);
+      Animated.sequence([
+        Animated.timing(toastAnim, {
+          toValue: 1,
+          duration: 250,
+          useNativeDriver: true,
+        }),
+        Animated.delay(3000),
+        Animated.timing(toastAnim, {
+          toValue: 0,
+          duration: 300,
+          useNativeDriver: true,
+        }),
+      ]).start(() => {
+        setToastMessage(null);
+      });
+    }
+  }, [toastAnim]);
+
+  const [activeMode, setActiveMode] = useState<ExerciseLibraryMode>(() => {
+    if (mode) return mode;
+    if (replaceMode) return 'replace';
+    if (searchParams.mode === 'quick_start') return 'quick_start';
+    if (searchParams.mode === 'add_to_workout') return 'add_to_workout';
+    return 'default';
+  });
+
+  useEffect(() => {
+    if (mode) {
+      setActiveMode(mode);
+    } else if (replaceMode) {
+      setActiveMode('replace');
+    } else if (searchParams.mode === 'quick_start') {
+      setActiveMode('quick_start');
+    } else if (searchParams.mode === 'add_to_workout') {
+      setActiveMode('add_to_workout');
+    } else {
+      setActiveMode('default');
+    }
+  }, [mode, replaceMode, searchParams.mode]);
+
+  useEffect(() => {
+    const isQuickStart = activeMode === 'quick_start' && searchParams.mode === 'quick_start';
+    if (isQuickStart) {
+      const currentT = searchParams.t || 'initial';
+      if (lastToastTimestamp.current !== currentT) {
+        lastToastTimestamp.current = currentT;
+        showToast('Välj en övning för att starta passet');
+      }
+    } else {
+      lastToastTimestamp.current = null;
+    }
+  }, [activeMode, searchParams.mode, searchParams.t, showToast]);
+
   const [exercises, setExercises] = useState<Exercise[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
@@ -116,7 +188,6 @@ export default function ExerciseLibrary({
   );
   const [activeEquipmentFilter, setActiveEquipmentFilter] = useState('All');
   const [selectedExercise, setSelectedExercise] = useState<Exercise | null>(null);
-  const router = useRouter();
   const { isBookmarked, toggleBookmark } = useBookmarks();
 
   useEffect(() => {
@@ -282,60 +353,90 @@ export default function ExerciseLibrary({
     }
   };
 
-  const renderExercise = ({ item }: { item: Exercise }) => (
-    <View style={styles.exerciseCard}>
-      {item.gifUrl ? (
-        <Image 
-          source={{ uri: item.gifUrl }} 
-          style={styles.exerciseThumbnail} 
-          contentFit="cover" 
-          autoplay={false}
-        />
-      ) : (
-        <View style={[styles.exerciseThumbnail, styles.placeholderThumbnail]}>
-          <Dumbbell size={24} color="#94A3B8" />
-        </View>
-      )}
-      <View style={styles.exerciseTextContainer}>
-        <View style={styles.exerciseTitleRow}>
-          <Text style={styles.exerciseTitle} numberOfLines={1}>{item.name}</Text>
-          {isBookmarked(item.id) && (
-            <Bookmark size={13} color="#A3E635" fill="#A3E635" style={{ marginLeft: 6 }} />
-          )}
-        </View>
-        <View style={styles.exerciseMetaRow}>
-          {item.target_muscle_sv ? (
-            <View style={styles.targetBadge}>
-              <Text style={styles.targetBadgeText} numberOfLines={1}>
-                {item.target_muscle_sv}
-              </Text>
-            </View>
-          ) : null}
-          {item.equipment ? (
-            <View style={styles.equipmentBadge}>
-              <Text style={styles.equipmentBadgeText} numberOfLines={1}>
-                {formatEquipmentLabel(item.equipment)}
-              </Text>
-            </View>
-          ) : null}
-          <Text style={styles.completionCountText}>
-            {item.completions_count || 0}
-          </Text>
-        </View>
-      </View>
-      <TouchableOpacity 
-        style={styles.menuButton} 
-        onPress={() => openMenu(item)}
-        hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+  const handleCardPress = async (exercise: Exercise) => {
+    if (activeMode === 'quick_start') {
+      setActiveMode('default');
+      router.setParams({ mode: 'default' });
+      await startQuickWorkout(exercise);
+    } else if (activeMode === 'add_to_workout') {
+      setActiveMode('default');
+      router.setParams({ mode: 'default' });
+      await addExerciseToActiveWorkout(exercise);
+      router.back();
+    } else if (replaceMode && onReplaceSelect) {
+      onReplaceSelect(exercise);
+    } else {
+      router.push(`/exercise/${exercise.id}`);
+    }
+  };
+
+  const renderExercise = ({ item }: { item: Exercise }) => {
+    const isSpecialMode = activeMode === 'quick_start' || activeMode === 'add_to_workout';
+    return (
+      <TouchableOpacity
+        style={styles.exerciseCard}
+        activeOpacity={0.75}
+        onPress={() => handleCardPress(item)}
       >
-        <MoreVertical size={20} color="#F8FAFC" />
+        {item.gifUrl ? (
+          <Image 
+            source={{ uri: item.gifUrl }} 
+            style={styles.exerciseThumbnail} 
+            contentFit="cover" 
+            autoplay={false}
+          />
+        ) : (
+          <View style={[styles.exerciseThumbnail, styles.placeholderThumbnail]}>
+            <Dumbbell size={24} color="#94A3B8" />
+          </View>
+        )}
+        <View style={styles.exerciseTextContainer}>
+          <View style={styles.exerciseTitleRow}>
+            <Text style={styles.exerciseTitle} numberOfLines={1}>{item.name}</Text>
+            {isBookmarked(item.id) && (
+              <Bookmark size={13} color="#A3E635" fill="#A3E635" style={{ marginLeft: 6 }} />
+            )}
+          </View>
+          <View style={styles.exerciseMetaRow}>
+            {item.target_muscle_sv ? (
+              <View style={styles.targetBadge}>
+                <Text style={styles.targetBadgeText} numberOfLines={1}>
+                  {item.target_muscle_sv}
+                </Text>
+              </View>
+            ) : null}
+            {item.equipment ? (
+              <View style={styles.equipmentBadge}>
+                <Text style={styles.equipmentBadgeText} numberOfLines={1}>
+                  {formatEquipmentLabel(item.equipment)}
+                </Text>
+              </View>
+            ) : null}
+            <Text style={styles.completionCountText}>
+              {item.completions_count || 0}
+            </Text>
+          </View>
+        </View>
+
+        {isSpecialMode ? (
+          <View style={styles.actionIconPill}>
+            <Plus size={18} color="#0A0A0A" strokeWidth={3} />
+          </View>
+        ) : (
+          <TouchableOpacity 
+            style={styles.menuButton} 
+            onPress={() => openMenu(item)}
+            hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+          >
+            <MoreVertical size={20} color="#F8FAFC" />
+          </TouchableOpacity>
+        )}
       </TouchableOpacity>
-    </View>
-  );
+    );
+  };
 
   return (
     <View style={styles.container}>
-      
       {/* Full width search bar */}
       <View style={styles.searchContainer}>
         <Search size={20} color="#000" style={styles.searchIcon} />
@@ -575,6 +676,28 @@ export default function ExerciseLibrary({
         </Pressable>
       </Modal>
 
+      {/* Floating Toast for iOS / Web */}
+      {toastMessage && (
+        <Animated.View
+          style={[
+            styles.floatingToast,
+            {
+              opacity: toastAnim,
+              transform: [
+                {
+                  translateY: toastAnim.interpolate({
+                    inputRange: [0, 1],
+                    outputRange: [16, 0],
+                  }),
+                },
+              ],
+            },
+          ]}
+          pointerEvents="none"
+        >
+          <Text style={styles.floatingToastText}>{toastMessage}</Text>
+        </Animated.View>
+      )}
     </View>
   );
 }
@@ -808,6 +931,39 @@ const styles = StyleSheet.create({
   },
   modalTextHighlight: {
     color: '#A3E635',
-  }
+  },
+  actionIconPill: {
+    width: 34,
+    height: 34,
+    borderRadius: 17,
+    backgroundColor: '#94A3B8', // Matches equipment text color
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginLeft: 10,
+    marginRight: 16,
+  },
+  floatingToast: {
+    position: 'absolute',
+    bottom: 84,
+    alignSelf: 'center',
+    backgroundColor: '#18181B',
+    paddingHorizontal: 20,
+    paddingVertical: 12,
+    borderRadius: 24,
+    borderWidth: 1,
+    borderColor: '#3F3F46',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.35,
+    shadowRadius: 8,
+    elevation: 6,
+    zIndex: 999,
+  },
+  floatingToastText: {
+    color: '#F8FAFC',
+    fontSize: 14,
+    fontWeight: '600',
+    textAlign: 'center',
+  },
 });
 
