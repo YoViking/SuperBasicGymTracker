@@ -122,6 +122,8 @@ interface WorkoutPlayerProps {
   bottomNavHeight?: number;
   hasBottomNav?: boolean;
   hideMiniPlayer?: boolean;
+  hasNextExercise?: boolean;
+  hasPreviousExercise?: boolean;
 }
 
 export default function WorkoutPlayer({
@@ -143,6 +145,8 @@ export default function WorkoutPlayer({
   bottomNavHeight,
   hasBottomNav = true,
   hideMiniPlayer = false,
+  hasNextExercise = false,
+  hasPreviousExercise = false,
 }: WorkoutPlayerProps) {
   const router = useRouter();
   const insets = useSafeAreaInsets();
@@ -346,6 +350,9 @@ export default function WorkoutPlayer({
     setEditWeight('');
   };
 
+  const onNextRef = useRef(onNext);
+  onNextRef.current = onNext;
+
   // When a set is checked off, we handle it
   const handleToggleSet = (setId: string, currentStatus: boolean) => {
     onToggleSet(setId, currentStatus);
@@ -353,10 +360,12 @@ export default function WorkoutPlayer({
     // Check if all sets are now done
     const allWillBeDone = activeExercise.sets.every((s: any) => s.id === setId ? true : s.is_done);
     if (allWillBeDone && !currentStatus) {
-      // Auto-advance after a small delay
-      setTimeout(() => {
-        onNext();
-      }, 500);
+      if (hasNextExercise) {
+        // Auto-advance after a small delay
+        setTimeout(() => {
+          onNextRef.current?.();
+        }, 500);
+      }
     }
   };
 
@@ -593,7 +602,11 @@ export default function WorkoutPlayer({
               <TouchableOpacity onPress={() => setIsWorkoutActive(!isWorkoutActive)} style={styles.miniIconButton}>
                 {isWorkoutActive ? <Pause size={24} color="#0A0A0A" /> : <Play size={24} color="#0A0A0A" fill="#0A0A0A" />}
               </TouchableOpacity>
-              <TouchableOpacity onPress={onNext} style={styles.miniIconButton}>
+              <TouchableOpacity 
+                onPress={onNext} 
+                disabled={!hasNextExercise}
+                style={[styles.miniIconButton, !hasNextExercise && { opacity: 0.35 }]}
+              >
                 <SkipForward size={24} color="#0A0A0A" fill="#0A0A0A" />
               </TouchableOpacity>
             </View>
@@ -791,7 +804,7 @@ export default function WorkoutPlayer({
                   })}
 
                   {/* Exercise Completion Banner */}
-                  {activeExercise.sets && activeExercise.sets.length > 0 && activeExercise.sets.every((s: any) => s.is_done) && (
+                  {activeExercise.sets && activeExercise.sets.length > 0 && activeExercise.sets.every((s: any) => s.is_done) && !hasNextExercise && (
                     <View style={styles.exerciseCompleteCard}>
                       <View style={styles.completeTitleRow}>
                         <View style={styles.completeIconWrapper}>
@@ -816,7 +829,7 @@ export default function WorkoutPlayer({
                           activeOpacity={0.8}
                         >
                           <Plus size={16} color="#0A0A0A" strokeWidth={3} />
-                          <Text style={styles.addNextExText}>+ Nästa övning</Text>
+                          <Text style={styles.addNextExText}>Nästa övning</Text>
                         </TouchableOpacity>
 
                         {onFinishPress && (
@@ -852,7 +865,13 @@ export default function WorkoutPlayer({
                   </View>
 
                   <View style={styles.playbackControlsRow}>
-                    <TouchableOpacity onPress={onPrevious} activeOpacity={0.7} hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}>
+                    <TouchableOpacity 
+                      onPress={onPrevious} 
+                      disabled={!hasPreviousExercise}
+                      activeOpacity={0.7} 
+                      hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
+                      style={{ opacity: hasPreviousExercise ? 1 : 0.3 }}
+                    >
                       <SkipBack size={38} color="#F8FAFC" fill="#F8FAFC" />
                     </TouchableOpacity>
 
@@ -864,7 +883,13 @@ export default function WorkoutPlayer({
                       )}
                     </TouchableOpacity>
 
-                    <TouchableOpacity onPress={onNext} activeOpacity={0.7} hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}>
+                    <TouchableOpacity 
+                      onPress={onNext} 
+                      disabled={!hasNextExercise}
+                      activeOpacity={0.7} 
+                      hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
+                      style={{ opacity: hasNextExercise ? 1 : 0.3 }}
+                    >
                       <SkipForward size={38} color="#F8FAFC" fill="#F8FAFC" />
                     </TouchableOpacity>
                   </View>
