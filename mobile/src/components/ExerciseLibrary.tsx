@@ -1,17 +1,49 @@
 import React, { useEffect, useState, useMemo, useRef, useCallback } from 'react';
-import { View, Text, StyleSheet, TextInput, TouchableOpacity, SectionList, ActivityIndicator, Modal, Pressable, ScrollView, Platform, ToastAndroid, Animated } from 'react-native';
+import {
+  View,
+  Text,
+  StyleSheet,
+  TextInput,
+  TouchableOpacity,
+  SectionList,
+  ActivityIndicator,
+  Modal,
+  Pressable,
+  ScrollView,
+  Platform,
+  ToastAndroid,
+  Animated,
+} from 'react-native';
 import { Image } from 'expo-image';
 import { supabase } from '../lib/supabase';
-import { Search, MoreVertical, Plus, Dumbbell, Bookmark, EyeOff, X, Trophy } from 'lucide-react-native';
+import {
+  Search,
+  MoreVertical,
+  Plus,
+  Dumbbell,
+  Bookmark,
+  EyeOff,
+  X,
+  Trophy,
+  SlidersHorizontal,
+  Check,
+} from 'lucide-react-native';
 import { ExerciseLibrary as Exercise } from '../types';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import { useBookmarks } from '../hooks/useBookmarks';
 import { useWorkoutSession } from '../context/WorkoutSessionContext';
-import { getExerciseTarget, getSubMusclesForGroup, normalizeTargetKey, TARGET_DISPLAY_SV } from '../utils/muscleHierarchy';
+import {
+  getExerciseTarget,
+  getSubMusclesForGroup,
+  normalizeTargetKey,
+  TARGET_DISPLAY_SV,
+} from '../utils/muscleHierarchy';
 
 const MUSCLE_GROUPS = ['All', 'Chest', 'Back', 'Legs', 'Arms', 'Shoulders', 'Core', 'Glutes', 'Other', 'Bookmarked'];
 
 const MUSCLE_GROUP_DISPLAY: Record<string, string> = {
+  All: 'Alla',
+  Alla: 'Alla',
   Chest: 'Bröst',
   Back: 'Rygg',
   Legs: 'Ben',
@@ -20,6 +52,7 @@ const MUSCLE_GROUP_DISPLAY: Record<string, string> = {
   Core: 'Core',
   Glutes: 'Glutes',
   Other: 'Övrigt',
+  Bookmarked: 'Bokmärkta',
   Bröst: 'Bröst',
   Rygg: 'Rygg',
   Ben: 'Ben',
@@ -27,16 +60,28 @@ const MUSCLE_GROUP_DISPLAY: Record<string, string> = {
   Axlar: 'Axlar',
 };
 
+const CATEGORY_MUSCLE_GROUPS = [
+  { id: 'Chest', label: 'Bröst', sub: 'Pectoralis' },
+  { id: 'Back', label: 'Rygg', sub: 'Lats, Traps m.fl.' },
+  { id: 'Legs', label: 'Ben', sub: 'Framsida, Baksida, Vader' },
+  { id: 'Arms', label: 'Armar', sub: 'Biceps, Triceps, Underarmar' },
+  { id: 'Shoulders', label: 'Axlar', sub: 'Deltoideus' },
+  { id: 'Core', label: 'Core / Mage', sub: 'Abdominals' },
+  { id: 'Glutes', label: 'Glutes / Rumpa', sub: 'Sätesmuskler' },
+  { id: 'Other', label: 'Övrigt', sub: 'Nacke, Adduktorer' },
+  { id: 'Bookmarked', label: 'Bokmärkta', sub: 'Dina favoriter' },
+];
+
 const EQUIPMENT_OPTIONS = [
-  { id: 'All', label: 'All' },
-  { id: 'Barbell', label: 'Barbell' },
-  { id: 'Dumbbell', label: 'Dumbbell' },
-  { id: 'Machine', label: 'Machine' },
-  { id: 'Cable', label: 'Cable' },
-  { id: 'Bodyweight', label: 'Bodyweight' },
+  { id: 'All', label: 'Alla' },
+  { id: 'Barbell', label: 'Skivstång' },
+  { id: 'Dumbbell', label: 'Hantlar' },
+  { id: 'Machine', label: 'Maskin' },
+  { id: 'Cable', label: 'Kabel' },
+  { id: 'Bodyweight', label: 'Kroppsvikt' },
   { id: 'Kettlebell', label: 'Kettlebell' },
-  { id: 'Bands', label: 'Bands' },
-  { id: 'Other', label: 'Other' },
+  { id: 'Bands', label: 'Gummiband' },
+  { id: 'Other', label: 'Övrigt' },
 ];
 
 const matchesEquipmentFilter = (exercise: Exercise, filter: string): boolean => {
@@ -77,19 +122,29 @@ const formatEquipmentLabel = (eq?: string): string => {
   const clean = eq.toLowerCase().trim();
   switch (clean) {
     case 'body only':
-      return 'Bodyweight';
+      return 'Kroppsvikt';
+    case 'barbell':
+      return 'Skivstång';
+    case 'dumbbell':
+      return 'Hantlar';
+    case 'machine':
+      return 'Maskin';
+    case 'cable':
+      return 'Kabel';
     case 'e-z curl bar':
       return 'EZ Bar';
     case 'kettlebells':
+    case 'kettlebell':
       return 'Kettlebell';
     case 'bands':
-      return 'Bands';
+    case 'band':
+      return 'Gummiband';
     case 'foam roll':
       return 'Foam Roll';
     case 'exercise ball':
-      return 'Exercise Ball';
+      return 'Träningsboll';
     case 'medicine ball':
-      return 'Medicine Ball';
+      return 'Medicinboll';
     default:
       return clean.charAt(0).toUpperCase() + clean.slice(1);
   }
@@ -110,11 +165,11 @@ export default function ExerciseLibrary({
   mode,
   defaultFilter = 'All',
   defaultSubFilter,
-  onReplaceSelect
+  onReplaceSelect,
 }: ExerciseLibraryProps = {}) {
   const router = useRouter();
   const searchParams = useLocalSearchParams<{ mode?: string; t?: string }>();
-  const { startQuickWorkout, addExerciseToActiveWorkout, isSaving } = useWorkoutSession();
+  const { startQuickWorkout, addExerciseToActiveWorkout, isSaving, activeExercise, isPlayerExpanded } = useWorkoutSession();
 
   const [toastMessage, setToastMessage] = useState<string | null>(null);
   const toastAnim = useRef(new Animated.Value(0)).current;
@@ -190,13 +245,22 @@ export default function ExerciseLibrary({
   const [selectedExercise, setSelectedExercise] = useState<Exercise | null>(null);
   const { isBookmarked, toggleBookmark } = useBookmarks();
 
+  // Control whether we are in 'filters' view (selecting muscle group / equipment) or 'exercises' view
+  const [viewMode, setViewMode] = useState<'filters' | 'exercises'>(() => {
+    if ((defaultFilter && defaultFilter !== 'All' && defaultFilter !== 'Alla') || replaceMode) {
+      return 'exercises';
+    }
+    return 'filters';
+  });
+
   useEffect(() => {
     fetchExercises();
   }, []);
 
   useEffect(() => {
-    if (defaultFilter) {
+    if (defaultFilter && defaultFilter !== 'All') {
       setActiveMuscleFilter(defaultFilter);
+      setViewMode('exercises');
     }
   }, [defaultFilter]);
 
@@ -247,6 +311,7 @@ export default function ExerciseLibrary({
       setActiveMuscleFilter(group);
       setActiveSubFilter('All');
     }
+    // Note: User stays in filter view! Does NOT automatically switch away.
   };
 
   const handleSubMuscleSelect = (subId: string) => {
@@ -263,13 +328,26 @@ export default function ExerciseLibrary({
     } else {
       setActiveEquipmentFilter(eqId);
     }
+    // Note: User stays in filter view! Does NOT automatically switch away.
+  };
+
+  const handleResetFilters = () => {
+    setActiveMuscleFilter('All');
+    setActiveSubFilter('All');
+    setActiveEquipmentFilter('All');
+    setSearchQuery('');
   };
 
   const currentSubMuscles = useMemo(() => {
     if (activeMuscleFilter === 'All' || activeMuscleFilter === 'Alla' || activeMuscleFilter === 'Bookmarked') {
       return [];
     }
-    return getSubMusclesForGroup(activeMuscleFilter);
+    const subs = getSubMusclesForGroup(activeMuscleFilter);
+    // Om det bara finns 1 (eller 0) submuskel, t.ex. Bröst -> Bröst, är det överflödigt att visa subfilter
+    if (subs.length <= 1) {
+      return [];
+    }
+    return subs;
   }, [activeMuscleFilter]);
 
   const isMuscleGroupActive = (group: string) => {
@@ -280,7 +358,25 @@ export default function ExerciseLibrary({
     return false;
   };
 
-  const getFilteredData = () => {
+  // Calculate active filter count for the search bar filter holder badge
+  const activeFilterCount = useMemo(() => {
+    let count = 0;
+    if (activeMuscleFilter !== 'All' && activeMuscleFilter !== 'Alla') count += 1;
+    if (activeSubFilter !== 'All' && activeSubFilter !== 'Alla') count += 1;
+    if (activeEquipmentFilter !== 'All' && activeEquipmentFilter !== 'Alla') count += 1;
+    return count;
+  }, [activeMuscleFilter, activeSubFilter, activeEquipmentFilter]);
+
+  const hasActiveFilters = activeFilterCount > 0;
+
+  const isMiniPlayerActive = Boolean(
+    activeExercise &&
+    !isPlayerExpanded &&
+    activeMode !== 'add_to_workout' &&
+    searchParams.mode !== 'add_to_workout'
+  );
+
+  const filteredSections = useMemo(() => {
     let filtered = exercises;
 
     if (searchQuery.trim()) {
@@ -309,8 +405,8 @@ export default function ExerciseLibrary({
       filtered = filtered.filter(e => matchesEquipmentFilter(e, activeEquipmentFilter));
     }
 
-    // Group by muscle_group for the SectionList (or specific target if single group is selected)
-    const isSingleMainGroup = activeMuscleFilter !== 'All' && activeMuscleFilter !== 'Alla' && activeMuscleFilter !== 'Bookmarked';
+    const isSingleMainGroup =
+      activeMuscleFilter !== 'All' && activeMuscleFilter !== 'Alla' && activeMuscleFilter !== 'Bookmarked';
 
     const grouped = filtered.reduce((acc, curr) => {
       let groupTitle = '';
@@ -328,10 +424,39 @@ export default function ExerciseLibrary({
       return acc;
     }, {} as Record<string, Exercise[]>);
 
-    return Object.keys(grouped).map(key => ({
-      title: key,
-      data: grouped[key],
-    })).sort((a, b) => a.title.localeCompare(b.title));
+    return Object.keys(grouped)
+      .map(key => ({
+        title: key,
+        data: grouped[key],
+      }))
+      .sort((a, b) => a.title.localeCompare(b.title));
+  }, [exercises, searchQuery, activeMuscleFilter, activeSubFilter, activeEquipmentFilter, isBookmarked]);
+
+  const totalFilteredCount = useMemo(() => {
+    return filteredSections.reduce((sum, s) => sum + s.data.length, 0);
+  }, [filteredSections]);
+
+  const removeIndividualFilter = (type: 'muscle' | 'sub' | 'equipment') => {
+    if (type === 'muscle') {
+      setActiveMuscleFilter('All');
+      setActiveSubFilter('All');
+      if (
+        (activeEquipmentFilter === 'All' || activeEquipmentFilter === 'Alla') &&
+        !searchQuery.trim()
+      ) {
+        setViewMode('filters');
+      }
+    } else if (type === 'sub') {
+      setActiveSubFilter('All');
+    } else if (type === 'equipment') {
+      setActiveEquipmentFilter('All');
+      if (
+        (activeMuscleFilter === 'All' || activeMuscleFilter === 'Alla') &&
+        !searchQuery.trim()
+      ) {
+        setViewMode('filters');
+      }
+    }
   };
 
   const openMenu = (exercise: Exercise) => {
@@ -379,56 +504,42 @@ export default function ExerciseLibrary({
         onPress={() => handleCardPress(item)}
       >
         {item.gifUrl ? (
-          <Image 
-            source={{ uri: item.gifUrl }} 
-            style={styles.exerciseThumbnail} 
-            contentFit="cover" 
+          <Image
+            source={{ uri: item.gifUrl }}
+            style={styles.exerciseThumbnail}
+            contentFit="cover"
             autoplay={false}
           />
         ) : (
           <View style={[styles.exerciseThumbnail, styles.placeholderThumbnail]}>
-            <Dumbbell size={24} color="#94A3B8" />
+            <Dumbbell size={26} color="#64748B" />
           </View>
         )}
         <View style={styles.exerciseTextContainer}>
           <View style={styles.exerciseTitleRow}>
-            <Text style={styles.exerciseTitle} numberOfLines={1}>{item.name}</Text>
+            <Text style={styles.exerciseTitle} numberOfLines={1}>
+              {item.name}
+            </Text>
             {isBookmarked(item.id) && (
-              <Bookmark size={13} color="#A3E635" fill="#A3E635" style={{ marginLeft: 6 }} />
+              <Bookmark size={14} color="#A3E635" fill="#A3E635" style={{ marginLeft: 6 }} />
             )}
           </View>
-          <View style={styles.exerciseMetaRow}>
-            {item.target_muscle_sv ? (
-              <View style={styles.targetBadge}>
-                <Text style={styles.targetBadgeText} numberOfLines={1}>
-                  {item.target_muscle_sv}
-                </Text>
-              </View>
-            ) : null}
-            {item.equipment ? (
-              <View style={styles.equipmentBadge}>
-                <Text style={styles.equipmentBadgeText} numberOfLines={1}>
-                  {formatEquipmentLabel(item.equipment)}
-                </Text>
-              </View>
-            ) : null}
-            <Text style={styles.completionCountText}>
-              {item.completions_count || 0}
-            </Text>
-          </View>
+          <Text style={styles.completionCountText}>
+            {item.completions_count || 0}
+          </Text>
         </View>
 
         {isSpecialMode ? (
           <View style={styles.actionIconPill}>
-            <Plus size={18} color="#0A0A0A" strokeWidth={3} />
+            <Plus size={20} color="#0A0A0A" strokeWidth={3} />
           </View>
         ) : (
-          <TouchableOpacity 
-            style={styles.menuButton} 
+          <TouchableOpacity
+            style={styles.menuButton}
             onPress={() => openMenu(item)}
-            hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+            hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
           >
-            <MoreVertical size={20} color="#F8FAFC" />
+            <MoreVertical size={20} color="#94A3B8" />
           </TouchableOpacity>
         )}
       </TouchableOpacity>
@@ -437,193 +548,418 @@ export default function ExerciseLibrary({
 
   return (
     <View style={styles.container}>
-      {/* Full width search bar */}
-      <View style={styles.searchContainer}>
-        <Search size={20} color="#000" style={styles.searchIcon} />
-        <TextInput
-          style={styles.searchInput}
-          placeholder="Sök övning..."
-          placeholderTextColor="#64748B"
-          value={searchQuery}
-          onChangeText={setSearchQuery}
-        />
-        {searchQuery.length > 0 && (
-          <TouchableOpacity onPress={() => setSearchQuery('')} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
-            <X size={18} color="#475569" />
+      {/* Header Search Bar with Integrated Filter Holder */}
+      <View style={styles.headerRow}>
+        <View style={styles.searchContainer}>
+          <Search size={18} color="#475569" style={styles.searchIcon} />
+          <TextInput
+            style={styles.searchInput}
+            placeholder="Sök övning..."
+            placeholderTextColor="#64748B"
+            value={searchQuery}
+            onChangeText={(text) => {
+              setSearchQuery(text);
+              if (text.trim().length > 0) {
+                setViewMode('exercises');
+              }
+            }}
+          />
+          {searchQuery.length > 0 && (
+            <TouchableOpacity
+              onPress={() => setSearchQuery('')}
+              hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+              style={styles.clearSearchBtn}
+            >
+              <X size={16} color="#64748B" />
+            </TouchableOpacity>
+          )}
+
+          {/* Filterhållare inuti sökrutan - växlar smidigt mellan filtervy och övningslista */}
+          <TouchableOpacity
+            style={[
+              styles.filterHolderBtn,
+              (hasActiveFilters || viewMode === 'filters') && styles.filterHolderBtnActive,
+            ]}
+            onPress={() => setViewMode(viewMode === 'filters' ? 'exercises' : 'filters')}
+            activeOpacity={0.7}
+          >
+            <SlidersHorizontal
+              size={14}
+              color={hasActiveFilters || viewMode === 'filters' ? '#A3E635' : '#475569'}
+            />
+            <Text
+              style={[
+                styles.filterHolderBtnText,
+                (hasActiveFilters || viewMode === 'filters') && styles.filterHolderBtnTextActive,
+              ]}
+            >
+              Filter
+            </Text>
+            {hasActiveFilters && (
+              <View style={styles.filterCountBadge}>
+                <Text style={styles.filterCountBadgeText}>{activeFilterCount}</Text>
+              </View>
+            )}
+          </TouchableOpacity>
+        </View>
+
+        {/* Top / Leaderboard button */}
+        {!replaceMode && (
+          <TouchableOpacity
+            style={styles.topNavButton}
+            onPress={() => router.push('/exercise/top')}
+            activeOpacity={0.7}
+          >
+            <Trophy size={20} color="#F8FAFC" />
           </TouchableOpacity>
         )}
       </View>
 
-      <Text style={styles.title}>Övningar</Text>
-
-      {/* Filter Sections */}
-      <View style={styles.filtersWrapper}>
-        {/* Muscle Group Filter */}
-        <View style={styles.filterSection}>
-          <Text style={styles.filterCategoryLabel}>MUSKELGRUPP</Text>
+      {/* Active Filter Chips Bar (Shown when in exercise list mode with filters) */}
+      {viewMode === 'exercises' && hasActiveFilters && (
+        <View style={styles.activeChipsRow}>
           <ScrollView
             horizontal
             showsHorizontalScrollIndicator={false}
-            contentContainerStyle={styles.filterScrollContent}
+            contentContainerStyle={styles.activeChipsScroll}
           >
-            {MUSCLE_GROUPS.map(group => {
-              const isActive = isMuscleGroupActive(group);
-              return (
-                <TouchableOpacity
-                  key={group}
-                  style={[styles.filterChip, isActive && styles.activeFilterChip]}
-                  onPress={() => handleMuscleSelect(group)}
-                  activeOpacity={0.7}
-                >
-                  <Text style={[styles.filterText, isActive && styles.activeFilterText]}>
-                    {group}
-                  </Text>
-                </TouchableOpacity>
-              );
-            })}
-          </ScrollView>
-        </View>
-
-        {/* Specific Muscle Sub-filter */}
-        {currentSubMuscles.length > 0 && (
-          <View style={styles.filterSection}>
-            <Text style={styles.filterCategoryLabel}>SPECIFIK MUSKEL</Text>
-            <ScrollView
-              horizontal
-              showsHorizontalScrollIndicator={false}
-              contentContainerStyle={styles.filterScrollContent}
-            >
+            {activeMuscleFilter !== 'All' && activeMuscleFilter !== 'Alla' && (
               <TouchableOpacity
-                style={[
-                  styles.filterChip,
-                  (activeSubFilter === 'All' || activeSubFilter === 'Alla') && styles.activeFilterChip
-                ]}
-                onPress={() => setActiveSubFilter('All')}
+                style={styles.activeChip}
+                onPress={() => removeIndividualFilter('muscle')}
                 activeOpacity={0.7}
               >
-                <Text
-                  style={[
-                    styles.filterText,
-                    (activeSubFilter === 'All' || activeSubFilter === 'Alla') && styles.activeFilterText
-                  ]}
-                >
-                  Alla
+                <Text style={styles.activeChipText}>
+                  {MUSCLE_GROUP_DISPLAY[activeMuscleFilter] || activeMuscleFilter}
                 </Text>
+                <X size={13} color="#A3E635" style={{ marginLeft: 4 }} />
               </TouchableOpacity>
-              {currentSubMuscles.map(sub => {
-                const isActive = activeSubFilter.toLowerCase() === sub.id.toLowerCase();
-                return (
-                  <TouchableOpacity
-                    key={sub.id}
-                    style={[styles.filterChip, isActive && styles.activeFilterChip]}
-                    onPress={() => handleSubMuscleSelect(sub.id)}
-                    activeOpacity={0.7}
-                  >
-                    <Text style={[styles.filterText, isActive && styles.activeFilterText]}>
-                      {sub.label}
-                    </Text>
-                  </TouchableOpacity>
-                );
-              })}
-            </ScrollView>
-          </View>
-        )}
+            )}
 
-        {/* Equipment Filter */}
-        <View style={styles.filterSection}>
-          <Text style={styles.filterCategoryLabel}>UTRUSTNING</Text>
-          <ScrollView
-            horizontal
-            showsHorizontalScrollIndicator={false}
-            contentContainerStyle={styles.filterScrollContent}
-          >
-            {EQUIPMENT_OPTIONS.map(eq => {
-              const isActive = activeEquipmentFilter === eq.id || (eq.id === 'All' && activeEquipmentFilter === 'Alla');
-              return (
-                <TouchableOpacity
-                  key={eq.id}
-                  style={[styles.filterChip, isActive && styles.activeFilterChip]}
-                  onPress={() => handleEquipmentSelect(eq.id)}
-                  activeOpacity={0.7}
-                >
-                  <Text style={[styles.filterText, isActive && styles.activeFilterText]}>
-                    {eq.label}
-                  </Text>
-                </TouchableOpacity>
-              );
-            })}
+            {activeSubFilter !== 'All' && activeSubFilter !== 'Alla' && (
+              <TouchableOpacity
+                style={styles.activeChip}
+                onPress={() => removeIndividualFilter('sub')}
+                activeOpacity={0.7}
+              >
+                <Text style={styles.activeChipText}>
+                  {TARGET_DISPLAY_SV[activeSubFilter.toLowerCase()] || activeSubFilter}
+                </Text>
+                <X size={13} color="#A3E635" style={{ marginLeft: 4 }} />
+              </TouchableOpacity>
+            )}
+
+            {activeEquipmentFilter !== 'All' && activeEquipmentFilter !== 'Alla' && (
+              <TouchableOpacity
+                style={styles.activeChip}
+                onPress={() => removeIndividualFilter('equipment')}
+                activeOpacity={0.7}
+              >
+                <Text style={styles.activeChipText}>
+                  {EQUIPMENT_OPTIONS.find(e => e.id === activeEquipmentFilter)?.label || activeEquipmentFilter}
+                </Text>
+                <X size={13} color="#A3E635" style={{ marginLeft: 4 }} />
+              </TouchableOpacity>
+            )}
+
+            <TouchableOpacity
+              style={styles.modifyActiveChip}
+              onPress={() => setViewMode('filters')}
+              activeOpacity={0.7}
+            >
+              <SlidersHorizontal size={12} color="#94A3B8" style={{ marginRight: 4 }} />
+              <Text style={styles.modifyActiveChipText}>Ändra</Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={styles.resetActiveChip}
+              onPress={() => {
+                handleResetFilters();
+                setViewMode('filters');
+              }}
+              activeOpacity={0.7}
+            >
+              <Text style={styles.resetActiveChipText}>Rensa alla</Text>
+            </TouchableOpacity>
           </ScrollView>
         </View>
-      </View>
-
-      {/* Top / Leaderboard button */}
-      {!replaceMode && (
-        <TouchableOpacity
-          style={styles.topNavButton}
-          onPress={() => router.push('/exercise/top')}
-          activeOpacity={0.7}
-        >
-          <Trophy size={20} color="#F8FAFC" style={styles.topIcon} />
-          <Text style={styles.topNavButtonText}>Top</Text>
-        </TouchableOpacity>
       )}
 
+      {/* Main Content Area */}
       {loading ? (
-        <ActivityIndicator size="large" color="#A3E635" style={{ marginTop: 40 }} />
-      ) : (
+        <ActivityIndicator size="large" color="#A3E635" style={{ marginTop: 60 }} />
+      ) : viewMode === 'exercises' ? (
+        /* Filtrerat övningsläge: Visar övningar över hela skärmen */
         <SectionList
-          sections={getFilteredData()}
+          sections={filteredSections}
           keyExtractor={(item) => item.id}
           renderItem={renderExercise}
           renderSectionHeader={({ section: { title } }) => (
             <Text style={styles.sectionHeader}>{title}</Text>
           )}
-          contentContainerStyle={styles.listContent}
+          contentContainerStyle={[
+            styles.listContent,
+            isMiniPlayerActive && { paddingBottom: 110 },
+          ]}
           stickySectionHeadersEnabled={false}
           ListEmptyComponent={
             <View style={styles.emptyContainer}>
-              <Bookmark 
-                size={40} 
-                color={activeMuscleFilter === 'Bookmarked' ? "#A3E635" : "#475569"} 
-                fill={activeMuscleFilter === 'Bookmarked' ? "rgba(163, 230, 53, 0.2)" : "transparent"}
-                style={{ marginBottom: 12 }} 
+              <Bookmark
+                size={40}
+                color={activeMuscleFilter === 'Bookmarked' ? '#A3E635' : '#475569'}
+                fill={activeMuscleFilter === 'Bookmarked' ? 'rgba(163, 230, 53, 0.2)' : 'transparent'}
+                style={{ marginBottom: 12 }}
               />
               <Text style={styles.emptyTitle}>
-                {activeMuscleFilter === 'Bookmarked' ? 'Inga bokmärkta övningar än' : 'Inga övningar hittades'}
+                {activeMuscleFilter === 'Bookmarked'
+                  ? 'Inga bokmärkta övningar än'
+                  : 'Inga övningar hittades'}
               </Text>
               <Text style={styles.emptySubtitle}>
                 {activeMuscleFilter === 'Bookmarked'
                   ? 'Tryck på (⋮) vid en övning och välj "Bokmärk" för att spara dina favoriter här!'
-                  : 'Prova att justera sökning eller filter'}
+                  : 'Prova att justera dina filter eller sökning'}
               </Text>
-              {(activeMuscleFilter !== 'All' || activeEquipmentFilter !== 'All' || searchQuery !== '') && (
+              <View style={{ flexDirection: 'row', gap: 10, marginTop: 8 }}>
+                <TouchableOpacity
+                  style={styles.emptyActionBtn}
+                  onPress={() => setViewMode('filters')}
+                  activeOpacity={0.7}
+                >
+                  <Text style={styles.emptyActionBtnText}>Ändra filter</Text>
+                </TouchableOpacity>
                 <TouchableOpacity
                   style={styles.resetFiltersButton}
                   onPress={() => {
-                    setActiveMuscleFilter('All');
-                    setActiveEquipmentFilter('All');
-                    setSearchQuery('');
+                    handleResetFilters();
+                    setViewMode('filters');
                   }}
+                  activeOpacity={0.7}
                 >
-                  <Text style={styles.resetFiltersButtonText}>Återställ filter</Text>
+                  <Text style={styles.resetFiltersButtonText}>Återställ</Text>
                 </TouchableOpacity>
-              )}
+              </View>
             </View>
           }
         />
+      ) : (
+        /* Filtervy: Stanna kvar här och välj muskelgrupp och utrustning fram tills användaren trycker "Visa xx övningar" */
+        <View style={styles.filterViewWrapper}>
+          <ScrollView
+            style={styles.initialContainer}
+            contentContainerStyle={[
+              styles.initialContent,
+              isMiniPlayerActive && { paddingBottom: 80 },
+            ]}
+            showsVerticalScrollIndicator={false}
+          >
+            <View style={styles.initialHero}>
+              <Text style={styles.initialHeroTitle}>Övningar</Text>
+              <Text style={styles.initialHeroSubtitle}>
+                Välj muskelgrupp och utrustning – tryck sedan på knappen längst ner för att visa övningar
+              </Text>
+            </View>
+
+            {/* Sektion 1: Muskelgrupper */}
+            <View style={styles.initialSection}>
+              <View style={styles.initialSectionHeader}>
+                <Text style={styles.initialSectionCategory}>MUSKELGRUPPER</Text>
+                <Text style={styles.initialSectionHint}>
+                  {activeMuscleFilter !== 'All' && activeMuscleFilter !== 'Alla'
+                    ? MUSCLE_GROUP_DISPLAY[activeMuscleFilter] || activeMuscleFilter
+                    : 'Välj fokusområde'}
+                </Text>
+              </View>
+
+              <View style={styles.muscleGrid}>
+                {CATEGORY_MUSCLE_GROUPS.map((mg) => {
+                  const isBookmark = mg.id === 'Bookmarked';
+                  const isActive = isMuscleGroupActive(mg.id);
+                  return (
+                    <TouchableOpacity
+                      key={mg.id}
+                      style={[
+                        styles.muscleCard,
+                        isActive && styles.muscleCardActive,
+                        isBookmark && !isActive && styles.bookmarkCard,
+                      ]}
+                      activeOpacity={0.75}
+                      onPress={() => handleMuscleSelect(mg.id)}
+                    >
+                      <View style={styles.muscleCardHeader}>
+                        <View
+                          style={[
+                            styles.muscleIconBox,
+                            isActive && styles.muscleIconBoxActive,
+                            isBookmark && !isActive && styles.bookmarkIconBox,
+                          ]}
+                        >
+                          {isBookmark ? (
+                            <Bookmark
+                              size={18}
+                              color="#A3E635"
+                              fill={isActive ? '#A3E635' : 'transparent'}
+                            />
+                          ) : (
+                            <Dumbbell size={18} color={isActive ? '#A3E635' : '#94A3B8'} />
+                          )}
+                        </View>
+                        {isActive && (
+                          <View style={styles.muscleCheckBadge}>
+                            <Check size={13} color="#0A0A0A" strokeWidth={3} />
+                          </View>
+                        )}
+                      </View>
+                      <Text
+                        style={[
+                          styles.muscleCardName,
+                          isActive && styles.muscleCardNameActive,
+                          isBookmark && !isActive && styles.bookmarkCardName,
+                        ]}
+                        numberOfLines={1}
+                      >
+                        {mg.label}
+                      </Text>
+                      <Text style={styles.muscleCardSub} numberOfLines={1}>
+                        {mg.sub}
+                      </Text>
+                    </TouchableOpacity>
+                  );
+                })}
+              </View>
+            </View>
+
+            {/* Submuskler (visas direkt om vald muskelgrupp har specifika muskler) */}
+            {currentSubMuscles.length > 0 && (
+              <View style={styles.initialSection}>
+                <View style={styles.initialSectionHeader}>
+                  <Text style={styles.initialSectionCategory}>SPECIFIK MUSKEL (VALFRITT)</Text>
+                  <Text style={styles.initialSectionHint}>Fokusera ytterligare</Text>
+                </View>
+
+                <View style={styles.subMuscleChipsWrap}>
+                  <TouchableOpacity
+                    style={[
+                      styles.subMuscleChip,
+                      (activeSubFilter === 'All' || activeSubFilter === 'Alla') && styles.subMuscleChipActive,
+                    ]}
+                    onPress={() => setActiveSubFilter('All')}
+                    activeOpacity={0.7}
+                  >
+                    <Text
+                      style={[
+                        styles.subMuscleChipText,
+                        (activeSubFilter === 'All' || activeSubFilter === 'Alla') && styles.subMuscleChipTextActive,
+                      ]}
+                    >
+                      Alla
+                    </Text>
+                  </TouchableOpacity>
+                  {currentSubMuscles.map((sub) => {
+                    const isActive = activeSubFilter.toLowerCase() === sub.id.toLowerCase();
+                    return (
+                      <TouchableOpacity
+                        key={sub.id}
+                        style={[styles.subMuscleChip, isActive && styles.subMuscleChipActive]}
+                        onPress={() => handleSubMuscleSelect(sub.id)}
+                        activeOpacity={0.7}
+                      >
+                        <Text style={[styles.subMuscleChipText, isActive && styles.subMuscleChipTextActive]}>
+                          {sub.label}
+                        </Text>
+                        {isActive && <Check size={13} color="#A3E635" style={{ marginLeft: 4 }} />}
+                      </TouchableOpacity>
+                    );
+                  })}
+                </View>
+              </View>
+            )}
+
+            {/* Sektion 2: Utrustning */}
+            <View style={styles.initialSection}>
+              <View style={styles.initialSectionHeader}>
+                <Text style={styles.initialSectionCategory}>UTRUSTNING</Text>
+                <Text style={styles.initialSectionHint}>
+                  {activeEquipmentFilter !== 'All' && activeEquipmentFilter !== 'Alla'
+                    ? EQUIPMENT_OPTIONS.find(e => e.id === activeEquipmentFilter)?.label || activeEquipmentFilter
+                    : 'Filtrera efter redskap'}
+                </Text>
+              </View>
+
+              <View style={styles.equipmentGrid}>
+                {EQUIPMENT_OPTIONS.map((eq) => {
+                  const isActive =
+                    activeEquipmentFilter === eq.id ||
+                    (eq.id === 'All' && (activeEquipmentFilter === 'All' || activeEquipmentFilter === 'Alla'));
+                  return (
+                    <TouchableOpacity
+                      key={eq.id}
+                      style={[
+                        styles.equipmentGridChip,
+                        isActive && styles.equipmentGridChipActive,
+                      ]}
+                      activeOpacity={0.75}
+                      onPress={() => handleEquipmentSelect(eq.id)}
+                    >
+                      <Text
+                        style={[
+                          styles.equipmentGridText,
+                          isActive && styles.equipmentGridTextActive,
+                        ]}
+                      >
+                        {eq.label}
+                      </Text>
+                      {isActive && eq.id !== 'All' && (
+                        <Check size={13} color="#A3E635" style={{ marginLeft: 6 }} />
+                      )}
+                    </TouchableOpacity>
+                  );
+                })}
+              </View>
+            </View>
+          </ScrollView>
+
+          {/* Sticky Bottom Bar - stanna kvar i filtervyn fram tills användaren trycker här! */}
+          <View
+            style={[
+              styles.stickyBottomBar,
+              isMiniPlayerActive && { marginBottom: 66 },
+            ]}
+          >
+            {hasActiveFilters && (
+              <TouchableOpacity
+                style={styles.bottomBarResetBtn}
+                onPress={handleResetFilters}
+                activeOpacity={0.7}
+              >
+                <Text style={styles.bottomBarResetText}>Rensa</Text>
+              </TouchableOpacity>
+            )}
+            <TouchableOpacity
+              style={styles.bottomBarApplyBtn}
+              onPress={() => setViewMode('exercises')}
+              activeOpacity={0.8}
+            >
+              <Text style={styles.bottomBarApplyText}>
+                {hasActiveFilters
+                  ? `Visa ${totalFilteredCount} övningar`
+                  : `Visa alla övningar (${totalFilteredCount})`}
+              </Text>
+            </TouchableOpacity>
+          </View>
+        </View>
       )}
 
-      {/* Bottom Sheet Modal */}
+      {/* Exercise Options Bottom Sheet Modal */}
       <Modal
         visible={!!selectedExercise}
         transparent={true}
         animationType="slide"
         onRequestClose={closeMenu}
       >
-        <Pressable style={styles.modalOverlay} onPress={closeMenu}>
-          <View style={styles.modalContent}>
-            
-            <TouchableOpacity 
+        <Pressable style={styles.menuModalOverlay} onPress={closeMenu}>
+          <View style={styles.menuModalContent}>
+            <TouchableOpacity
               style={styles.modalItem}
               onPress={() => {
                 if (selectedExercise) {
@@ -641,7 +977,7 @@ export default function ExerciseLibrary({
               <Text style={styles.modalText}>Gå till övning</Text>
             </TouchableOpacity>
 
-            <TouchableOpacity 
+            <TouchableOpacity
               style={styles.modalItem}
               onPress={async () => {
                 if (selectedExercise) {
@@ -656,13 +992,18 @@ export default function ExerciseLibrary({
                 }
               }}
             >
-              <Bookmark 
-                size={24} 
-                color={selectedExercise && isBookmarked(selectedExercise.id) ? "#A3E635" : "#F8FAFC"} 
-                fill={selectedExercise && isBookmarked(selectedExercise.id) ? "#A3E635" : "transparent"} 
-                style={styles.modalIcon} 
+              <Bookmark
+                size={24}
+                color={selectedExercise && isBookmarked(selectedExercise.id) ? '#A3E635' : '#F8FAFC'}
+                fill={selectedExercise && isBookmarked(selectedExercise.id) ? '#A3E635' : 'transparent'}
+                style={styles.modalIcon}
               />
-              <Text style={[styles.modalText, selectedExercise && isBookmarked(selectedExercise.id) && styles.modalTextHighlight]}>
+              <Text
+                style={[
+                  styles.modalText,
+                  selectedExercise && isBookmarked(selectedExercise.id) && styles.modalTextHighlight,
+                ]}
+              >
                 {selectedExercise && isBookmarked(selectedExercise.id) ? 'Ta bort bokmärke' : 'Bokmärk'}
               </Text>
             </TouchableOpacity>
@@ -671,7 +1012,6 @@ export default function ExerciseLibrary({
               <EyeOff size={24} color="#F8FAFC" style={styles.modalIcon} />
               <Text style={styles.modalText}>Dölj</Text>
             </TouchableOpacity>
-
           </View>
         </Pressable>
       </Modal>
@@ -709,132 +1049,177 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     paddingTop: 16,
   },
+  headerRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    marginBottom: 14,
+  },
   searchContainer: {
+    flex: 1,
     flexDirection: 'row',
     alignItems: 'center',
     backgroundColor: '#D1D5DB', // Light gray background
-    borderRadius: 20,
-    paddingHorizontal: 16,
-    height: 40,
-    width: '100%',
-    marginBottom: 16,
+    borderRadius: 22,
+    paddingLeft: 12,
+    paddingRight: 6,
+    height: 44,
   },
   searchIcon: {
-    marginRight: 8,
+    marginRight: 6,
   },
   searchInput: {
     flex: 1,
     color: '#000',
-    fontSize: 16,
-    padding: 0,
+    fontSize: 15,
+    paddingVertical: 0,
   },
-  title: {
-    fontSize: 28,
+  clearSearchBtn: {
+    padding: 4,
+    marginRight: 4,
+  },
+  filterHolderBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: 'rgba(0, 0, 0, 0.08)',
+    paddingVertical: 5,
+    paddingHorizontal: 10,
+    borderRadius: 16,
+    gap: 5,
+  },
+  filterHolderBtnActive: {
+    backgroundColor: '#0F172A',
+    borderWidth: 1.5,
+    borderColor: '#A3E635',
+  },
+  filterHolderBtnText: {
+    fontSize: 12,
     fontWeight: '700',
-    color: '#fff',
-    marginBottom: 12,
+    color: '#475569',
   },
-  filtersWrapper: {
-    marginBottom: 16,
-    gap: 12,
+  filterHolderBtnTextActive: {
+    color: '#F8FAFC',
   },
-  filterSection: {
-    gap: 6,
-  },
-  filterCategoryLabel: {
-    color: '#64748B',
-    fontSize: 11,
-    fontWeight: '700',
-    letterSpacing: 0.8,
-    textTransform: 'uppercase',
-  },
-  filterScrollContent: {
-    gap: 8,
-    paddingRight: 16,
-  },
-  filterChip: {
-    backgroundColor: '#2A2E35',
-    paddingVertical: 6,
-    paddingHorizontal: 14,
-    borderRadius: 6,
+  filterCountBadge: {
+    backgroundColor: '#A3E635',
+    borderRadius: 10,
+    width: 18,
+    height: 18,
     justifyContent: 'center',
     alignItems: 'center',
   },
-  activeFilterChip: {
+  filterCountBadgeText: {
+    color: '#0A0A0A',
+    fontSize: 11,
+    fontWeight: '800',
+  },
+  topNavButton: {
+    backgroundColor: '#1E222B',
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    justifyContent: 'center',
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: '#2D333F',
+  },
+  activeChipsRow: {
+    marginBottom: 12,
+  },
+  activeChipsScroll: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  activeChip: {
+    flexDirection: 'row',
+    alignItems: 'center',
     backgroundColor: '#1E2B1E',
     borderColor: '#A3E635',
     borderWidth: 1,
     paddingVertical: 5,
-    paddingHorizontal: 13,
+    paddingHorizontal: 10,
+    borderRadius: 16,
   },
-  filterText: {
-    color: '#94A3B8',
-    fontSize: 13,
-    fontWeight: '600',
-  },
-  activeFilterText: {
+  activeChipText: {
     color: '#A3E635',
+    fontSize: 12,
     fontWeight: '700',
   },
-  topNavButton: {
+  modifyActiveChip: {
     flexDirection: 'row',
     alignItems: 'center',
-    alignSelf: 'flex-start',
-    gap: 8,
-    paddingVertical: 6,
-    marginBottom: 8,
+    backgroundColor: '#1E222B',
+    borderColor: '#374151',
+    borderWidth: 1,
+    paddingVertical: 5,
+    paddingHorizontal: 10,
+    borderRadius: 16,
   },
-  topIcon: {
-    marginRight: 2,
+  modifyActiveChipText: {
+    color: '#94A3B8',
+    fontSize: 12,
+    fontWeight: '600',
   },
-  topNavButtonText: {
-    color: '#FFFFFF',
-    fontSize: 18,
-    fontWeight: '700',
+  resetActiveChip: {
+    backgroundColor: '#2A2E35',
+    paddingVertical: 5,
+    paddingHorizontal: 10,
+    borderRadius: 16,
   },
-  listContent: {
-    paddingBottom: 40,
+  resetActiveChipText: {
+    color: '#94A3B8',
+    fontSize: 12,
+    fontWeight: '600',
   },
   sectionHeader: {
     fontSize: 18,
     fontWeight: '700',
-    color: '#fff',
-    marginTop: 12,
-    marginBottom: 12,
+    color: '#FFFFFF',
+    marginTop: 8,
+    marginBottom: 10,
   },
+  listContent: {
+    paddingBottom: 40,
+  },
+  /* Större övningskort */
   exerciseCard: {
-    backgroundColor: '#2A2E35',
-    borderRadius: 8,
+    backgroundColor: '#1E222B',
+    borderRadius: 10,
     marginBottom: 12,
     flexDirection: 'row',
     alignItems: 'center',
-    overflow: 'hidden', // Ensures the image respects the border radius on the left side
-    height: 70, // Fixed height so the image is perfectly square and touches top/bottom
+    overflow: 'hidden',
+    height: 88, // Större kort: ökat från 70 till 88
+    borderWidth: 1,
+    borderColor: '#2D333F',
   },
   exerciseThumbnail: {
-    width: 70,
-    height: 70,
-    backgroundColor: '#FFFFFF', // White background for the API images
-    marginRight: 16,
+    width: 88, // Större thumbnail: ökat från 70 till 88
+    height: 88,
+    backgroundColor: '#FFFFFF',
+    marginRight: 14,
   },
   placeholderThumbnail: {
     justifyContent: 'center',
     alignItems: 'center',
+    backgroundColor: '#141820',
   },
   exerciseTextContainer: {
     flex: 1,
     justifyContent: 'center',
+    paddingVertical: 8,
   },
   exerciseTitleRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginBottom: 4,
+    marginBottom: 6,
     paddingRight: 8,
   },
   exerciseTitle: {
-    fontSize: 16,
+    fontSize: 17, // Större titel: ökat från 16 till 17
     fontWeight: '700',
-    color: '#fff',
+    color: '#F8FAFC',
     flexShrink: 1,
   },
   exerciseMetaRow: {
@@ -843,37 +1228,258 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   targetBadge: {
-    backgroundColor: '#1E293B',
-    paddingHorizontal: 6,
-    paddingVertical: 2,
-    borderRadius: 4,
+    backgroundColor: '#18251B',
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 5,
     borderWidth: 1,
-    borderColor: '#334155',
+    borderColor: 'rgba(163, 230, 53, 0.35)',
   },
   targetBadgeText: {
     color: '#A3E635',
-    fontSize: 11,
+    fontSize: 12,
     fontWeight: '600',
   },
   equipmentBadge: {
-    backgroundColor: '#1E293B',
-    paddingHorizontal: 6,
-    paddingVertical: 2,
-    borderRadius: 4,
+    backgroundColor: '#181C24',
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 5,
+    borderWidth: 1,
+    borderColor: '#2D333F',
   },
   equipmentBadgeText: {
     color: '#94A3B8',
-    fontSize: 11,
+    fontSize: 12,
     fontWeight: '600',
   },
   completionCountText: {
     fontSize: 13,
-    fontWeight: '400',
+    fontWeight: '500',
     color: '#64748B',
   },
-  menuButton: {
-    padding: 16, // Increase padding to make the dots icon well-spaced on the right
+  actionIconPill: {
+    width: 38,
+    height: 38,
+    borderRadius: 19,
+    backgroundColor: '#A3E635',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginLeft: 8,
+    marginRight: 14,
   },
+  menuButton: {
+    padding: 16,
+  },
+  /* Filter View Wrapper & Content */
+  filterViewWrapper: {
+    flex: 1,
+  },
+  initialContainer: {
+    flex: 1,
+  },
+  initialContent: {
+    paddingBottom: 24,
+  },
+  initialHero: {
+    marginBottom: 18,
+  },
+  initialHeroTitle: {
+    fontSize: 26,
+    fontWeight: '800',
+    color: '#FFFFFF',
+    marginBottom: 4,
+  },
+  initialHeroSubtitle: {
+    fontSize: 13,
+    color: '#94A3B8',
+    lineHeight: 18,
+  },
+  initialSection: {
+    marginBottom: 20,
+  },
+  initialSectionHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 10,
+  },
+  initialSectionCategory: {
+    color: '#64748B',
+    fontSize: 12,
+    fontWeight: '800',
+    letterSpacing: 0.8,
+  },
+  initialSectionHint: {
+    color: '#A3E635',
+    fontSize: 12,
+    fontWeight: '600',
+  },
+  muscleGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 10,
+  },
+  muscleCard: {
+    width: '48.5%',
+    backgroundColor: '#1E222B',
+    borderRadius: 12,
+    padding: 14,
+    borderWidth: 1,
+    borderColor: '#2D333F',
+  },
+  muscleCardActive: {
+    backgroundColor: '#152417',
+    borderColor: '#A3E635',
+    borderWidth: 1.5,
+  },
+  bookmarkCard: {
+    borderColor: '#2D333F',
+  },
+  muscleCardHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 8,
+  },
+  muscleIconBox: {
+    width: 34,
+    height: 34,
+    borderRadius: 8,
+    backgroundColor: '#262C37',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  muscleIconBoxActive: {
+    backgroundColor: 'rgba(163, 230, 53, 0.2)',
+  },
+  bookmarkIconBox: {
+    backgroundColor: 'rgba(163, 230, 53, 0.15)',
+  },
+  muscleCheckBadge: {
+    width: 22,
+    height: 22,
+    borderRadius: 11,
+    backgroundColor: '#A3E635',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  muscleCardName: {
+    fontSize: 15,
+    fontWeight: '700',
+    color: '#FFFFFF',
+    marginBottom: 2,
+  },
+  muscleCardNameActive: {
+    color: '#A3E635',
+  },
+  bookmarkCardName: {
+    color: '#A3E635',
+  },
+  muscleCardSub: {
+    fontSize: 11,
+    color: '#94A3B8',
+  },
+  /* Sub-muscles */
+  subMuscleChipsWrap: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+  },
+  subMuscleChip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#1E222B',
+    borderWidth: 1,
+    borderColor: '#2D333F',
+    paddingVertical: 8,
+    paddingHorizontal: 14,
+    borderRadius: 8,
+  },
+  subMuscleChipActive: {
+    backgroundColor: '#152417',
+    borderColor: '#A3E635',
+    borderWidth: 1.5,
+  },
+  subMuscleChipText: {
+    color: '#94A3B8',
+    fontSize: 13,
+    fontWeight: '600',
+  },
+  subMuscleChipTextActive: {
+    color: '#A3E635',
+    fontWeight: '700',
+  },
+  /* Equipment */
+  equipmentGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+  },
+  equipmentGridChip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#1E222B',
+    borderWidth: 1,
+    borderColor: '#2D333F',
+    paddingVertical: 10,
+    paddingHorizontal: 16,
+    borderRadius: 10,
+  },
+  equipmentGridChipActive: {
+    backgroundColor: '#152417',
+    borderColor: '#A3E635',
+    borderWidth: 1.5,
+  },
+  equipmentGridText: {
+    color: '#E2E8F0',
+    fontSize: 13,
+    fontWeight: '600',
+  },
+  equipmentGridTextActive: {
+    color: '#A3E635',
+    fontWeight: '700',
+  },
+  /* Sticky Bottom Bar */
+  stickyBottomBar: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    paddingTop: 12,
+    paddingBottom: 16,
+    backgroundColor: '#0A0A0A',
+    borderTopWidth: 1,
+    borderTopColor: '#1E222B',
+  },
+  bottomBarResetBtn: {
+    backgroundColor: '#1E222B',
+    borderWidth: 1,
+    borderColor: '#374151',
+    paddingVertical: 14,
+    paddingHorizontal: 18,
+    borderRadius: 12,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  bottomBarResetText: {
+    color: '#F8FAFC',
+    fontSize: 14,
+    fontWeight: '700',
+  },
+  bottomBarApplyBtn: {
+    flex: 1,
+    backgroundColor: '#A3E635',
+    paddingVertical: 14,
+    borderRadius: 12,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  bottomBarApplyText: {
+    color: '#0A0A0A',
+    fontSize: 15,
+    fontWeight: '800',
+  },
+  /* Empty State */
   emptyContainer: {
     paddingVertical: 48,
     alignItems: 'center',
@@ -891,30 +1497,46 @@ const styles = StyleSheet.create({
     marginBottom: 16,
     textAlign: 'center',
   },
+  emptyActionBtn: {
+    backgroundColor: '#1E222B',
+    borderWidth: 1,
+    borderColor: '#374151',
+    paddingVertical: 9,
+    paddingHorizontal: 18,
+    borderRadius: 8,
+  },
+  emptyActionBtnText: {
+    color: '#F8FAFC',
+    fontWeight: '700',
+    fontSize: 14,
+  },
   resetFiltersButton: {
-    backgroundColor: '#2A2E35',
+    backgroundColor: '#1E222B',
     borderColor: '#A3E635',
     borderWidth: 1,
-    paddingVertical: 8,
-    paddingHorizontal: 16,
+    paddingVertical: 9,
+    paddingHorizontal: 18,
     borderRadius: 8,
   },
   resetFiltersButtonText: {
     color: '#A3E635',
-    fontWeight: '600',
+    fontWeight: '700',
     fontSize: 14,
   },
-  modalOverlay: {
+  /* Exercise Menu Bottom Sheet */
+  menuModalOverlay: {
     flex: 1,
     justifyContent: 'flex-end',
     backgroundColor: 'rgba(0, 0, 0, 0.5)',
   },
-  modalContent: {
+  menuModalContent: {
     backgroundColor: '#0F1115',
     borderTopLeftRadius: 16,
     borderTopRightRadius: 16,
     paddingVertical: 24,
     paddingHorizontal: 20,
+    borderWidth: 1,
+    borderColor: '#2D333F',
   },
   modalItem: {
     flexDirection: 'row',
@@ -932,16 +1554,7 @@ const styles = StyleSheet.create({
   modalTextHighlight: {
     color: '#A3E635',
   },
-  actionIconPill: {
-    width: 34,
-    height: 34,
-    borderRadius: 17,
-    backgroundColor: '#94A3B8', // Matches equipment text color
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginLeft: 10,
-    marginRight: 16,
-  },
+  /* Floating Toast */
   floatingToast: {
     position: 'absolute',
     bottom: 84,
@@ -966,4 +1579,3 @@ const styles = StyleSheet.create({
     textAlign: 'center',
   },
 });
-

@@ -88,7 +88,11 @@ export function WorkoutSessionProvider({ children }: { children: React.ReactNode
   const activeWorkoutRef = useRef<Workout | null>(null);
   activeWorkoutRef.current = activeWorkout;
   const [groupedExercises, setGroupedExercises] = useState<GroupedExercise[]>([]);
+  const groupedExercisesRef = useRef<GroupedExercise[]>([]);
+  groupedExercisesRef.current = groupedExercises;
   const [activeExerciseId, setActiveExerciseId] = useState<string | null>(null);
+  const activeExerciseIdRef = useRef<string | null>(null);
+  activeExerciseIdRef.current = activeExerciseId;
   const [isPlayerExpanded, setIsPlayerExpanded] = useState(false);
   const [workoutTimeElapsed, setWorkoutTimeElapsed] = useState(0);
   const [isWorkoutActive, setIsWorkoutActive] = useState(false);
@@ -189,16 +193,22 @@ export function WorkoutSessionProvider({ children }: { children: React.ReactNode
   }, []);
 
   const handleNextExercise = useCallback(() => {
-    if (activeExerciseIndex >= 0 && activeExerciseIndex < groupedExercises.length - 1) {
-      setActiveExerciseId(groupedExercises[activeExerciseIndex + 1].exerciseId);
+    const list = groupedExercisesRef.current;
+    const currId = activeExerciseIdRef.current;
+    const idx = list.findIndex(g => g.exerciseId === currId);
+    if (idx >= 0 && idx < list.length - 1) {
+      setActiveExerciseId(list[idx + 1].exerciseId);
     }
-  }, [activeExerciseIndex, groupedExercises]);
+  }, []);
 
   const handlePreviousExercise = useCallback(() => {
-    if (activeExerciseIndex > 0) {
-      setActiveExerciseId(groupedExercises[activeExerciseIndex - 1].exerciseId);
+    const list = groupedExercisesRef.current;
+    const currId = activeExerciseIdRef.current;
+    const idx = list.findIndex(g => g.exerciseId === currId);
+    if (idx > 0) {
+      setActiveExerciseId(list[idx - 1].exerciseId);
     }
-  }, [activeExerciseIndex, groupedExercises]);
+  }, []);
 
   const toggleSetStatus = useCallback((setId: string, currentStatus: boolean) => {
     const newStatus = !currentStatus;
@@ -508,7 +518,15 @@ export function WorkoutSessionProvider({ children }: { children: React.ReactNode
 
       setGroupedExercises(prev => [...prev, group]);
 
-      if (!activeExerciseId) {
+      const currId = activeExerciseIdRef.current;
+      const currentGroup = groupedExercisesRef.current.find(g => g.exerciseId === currId);
+      const isCurrentDone = Boolean(
+        currentGroup &&
+        currentGroup.sets.length > 0 &&
+        currentGroup.sets.every(s => s.is_done)
+      );
+
+      if (!currId || isCurrentDone) {
         setActiveExerciseId(exercise.id);
       }
 
@@ -526,7 +544,7 @@ export function WorkoutSessionProvider({ children }: { children: React.ReactNode
     } finally {
       setIsSaving(false);
     }
-  }, [activeWorkout, groupedExercises.length, activeExerciseId, triggerWorkoutUpdate]);
+  }, [activeWorkout, triggerWorkoutUpdate]);
 
   const isSavingRef = useRef(false);
 

@@ -1,6 +1,6 @@
 import React from 'react';
 import { View, StyleSheet, Modal, TouchableOpacity, Text, Platform } from 'react-native';
-import { useSegments, useRouter } from 'expo-router';
+import { useSegments, useRouter, useGlobalSearchParams } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Dumbbell, Repeat, Trash2, CheckCircle2, XCircle, Plus } from 'lucide-react-native';
 import { useWorkoutSession } from '../context/WorkoutSessionContext';
@@ -16,6 +16,8 @@ export default function GlobalWorkoutPlayer() {
   const {
     activeWorkout,
     activeExercise,
+    groupedExercises,
+    activeExerciseId,
     isPlayerExpanded,
     setIsPlayerExpanded,
     handleNextExercise,
@@ -56,12 +58,19 @@ export default function GlobalWorkoutPlayer() {
   const isWorkoutDetailScreen = segs[0] === 'workout' && segs.length === 2 && !['exercise', 'replace', 'edit'].includes(segs[1]);
   const hasBottomNav = isTabsScreen || isWorkoutDetailScreen;
 
-  // Hide mini player on "Gå till övning" and "Byt övning" subpages
-  const isExerciseOrReplaceScreen =
-    segs[0] === 'workout' && (segs[1] === 'exercise' || segs[1] === 'replace');
+  const globalParams = useGlobalSearchParams<{ mode?: string }>();
+
+  // Hide mini player on "Gå till övning" and "Byt övning" subpages, or when adding an exercise to the active workout
+  const isAddToWorkout = globalParams.mode === 'add_to_workout';
+  const shouldHideMiniPlayer =
+    (segs[0] === 'workout' && (segs[1] === 'exercise' || segs[1] === 'replace')) || isAddToWorkout;
 
   const { height: defaultNavHeight } = getBottomNavLayout(insets.bottom);
   const bottomNavHeight = hasBottomNav ? defaultNavHeight : 0;
+
+  const activeExerciseIndex = groupedExercises.findIndex(g => g.exerciseId === activeExerciseId);
+  const hasNextExercise = activeExerciseIndex >= 0 && activeExerciseIndex < groupedExercises.length - 1;
+  const hasPreviousExercise = activeExerciseIndex > 0;
 
   return (
     <>
@@ -74,6 +83,8 @@ export default function GlobalWorkoutPlayer() {
           setIsExpanded={setIsPlayerExpanded}
           onNext={handleNextExercise}
           onPrevious={handlePreviousExercise}
+          hasNextExercise={hasNextExercise}
+          hasPreviousExercise={hasPreviousExercise}
           onToggleSet={toggleSetStatus}
           onUpdateSet={handleUpdateSet}
           onFinishPress={openNameModal}
@@ -84,7 +95,7 @@ export default function GlobalWorkoutPlayer() {
           onOptionsPress={() => openExerciseOptions(activeExercise.exerciseId)}
           bottomNavHeight={bottomNavHeight}
           hasBottomNav={hasBottomNav}
-          hideMiniPlayer={isExerciseOrReplaceScreen}
+          hideMiniPlayer={shouldHideMiniPlayer}
         />
       )}
 
