@@ -17,6 +17,7 @@ import {
   BackHandler
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { useRouter } from 'expo-router';
 import { Image } from 'expo-image';
 import { Play, Pause, SkipForward, SkipBack, Timer, MoreHorizontal, Check, X, Dumbbell, ChevronRight, CircleQuestionMark, Pencil, Plus, RotateCcw } from 'lucide-react-native';
 import { Audio } from 'expo-av';
@@ -90,6 +91,16 @@ const WORKOUT_GUIDE_ITEMS: GuideStepItem[] = [
     title: 'Klarmarkera set',
     description: 'Klicka i bockrutan för varje genomfört set. När alla set i en övning är klara växlar spelaren automatiskt vidare till nästa övning.',
   },
+  {
+    icon: MoreHorizontal,
+    iconColor: '#38BDF8',
+    iconBgColor: 'rgba(56, 189, 248, 0.12)',
+    badge: 'Kebabmeny',
+    badgeBgColor: 'rgba(56, 189, 248, 0.15)',
+    badgeTextColor: '#38BDF8',
+    title: 'Lägg till fler övningar',
+    description: 'Tryck på kebabmenyn (•••) längst ner till vänster för att lägga till fler övningar i passet.',
+  },
 ];
 
 interface WorkoutPlayerProps {
@@ -102,6 +113,7 @@ interface WorkoutPlayerProps {
   onPrevious: () => void;
   onToggleSet: (setId: string, currentStatus: boolean) => void;
   onUpdateSet?: (setId: string, reps: number, weight: number) => void;
+  onFinishPress?: () => void;
   workoutTimeElapsed: number;
   isWorkoutActive: boolean;
   setIsWorkoutActive: (b: boolean) => void;
@@ -122,6 +134,7 @@ export default function WorkoutPlayer({
   onPrevious,
   onToggleSet,
   onUpdateSet,
+  onFinishPress,
   workoutTimeElapsed,
   isWorkoutActive,
   setIsWorkoutActive,
@@ -131,6 +144,7 @@ export default function WorkoutPlayer({
   hasBottomNav = true,
   hideMiniPlayer = false,
 }: WorkoutPlayerProps) {
+  const router = useRouter();
   const insets = useSafeAreaInsets();
   const topSheetMargin = Math.max(insets.top + 8, Platform.OS === 'ios' ? 54 : 36);
   const { height: defaultNavHeight } = getBottomNavLayout(insets.bottom);
@@ -775,6 +789,48 @@ export default function WorkoutPlayer({
                       </View>
                     );
                   })}
+
+                  {/* Exercise Completion Banner */}
+                  {activeExercise.sets && activeExercise.sets.length > 0 && activeExercise.sets.every((s: any) => s.is_done) && (
+                    <View style={styles.exerciseCompleteCard}>
+                      <View style={styles.completeTitleRow}>
+                        <View style={styles.completeIconWrapper}>
+                          <Check size={16} color="#0A0A0A" strokeWidth={3} />
+                        </View>
+                        <View style={styles.completeTextCol}>
+                          <Text style={styles.completeTitle}>Bra kört! Övningen är klar</Text>
+                          <Text style={styles.completeSubtitle}>Välj nästa övning eller slutför passet.</Text>
+                        </View>
+                      </View>
+
+                      <View style={styles.completeActionsRow}>
+                        <TouchableOpacity
+                          style={styles.addNextExBtn}
+                          onPress={() => {
+                            setIsExpanded(false);
+                            router.push({
+                              pathname: '/(tabs)/exercises',
+                              params: { mode: 'add_to_workout' },
+                            });
+                          }}
+                          activeOpacity={0.8}
+                        >
+                          <Plus size={16} color="#0A0A0A" strokeWidth={3} />
+                          <Text style={styles.addNextExText}>+ Nästa övning</Text>
+                        </TouchableOpacity>
+
+                        {onFinishPress && (
+                          <TouchableOpacity
+                            style={styles.finishWorkoutPromptBtn}
+                            onPress={onFinishPress}
+                            activeOpacity={0.8}
+                          >
+                            <Text style={styles.finishWorkoutPromptText}>Slutför pass</Text>
+                          </TouchableOpacity>
+                        )}
+                      </View>
+                    </View>
+                  )}
                 </View>
               </ScrollView>
 
@@ -1217,6 +1273,77 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: '500',
     textAlign: 'center',
+  },
+  exerciseCompleteCard: {
+    backgroundColor: '#1E222B',
+    borderRadius: 16,
+    padding: 16,
+    marginTop: 18,
+    borderWidth: 1,
+    borderColor: 'rgba(163, 230, 53, 0.25)',
+  },
+  completeTitleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    marginBottom: 14,
+  },
+  completeIconWrapper: {
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    backgroundColor: '#A3E635',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  completeTextCol: {
+    flex: 1,
+  },
+  completeTitle: {
+    color: '#F8FAFC',
+    fontSize: 15,
+    fontWeight: '700',
+  },
+  completeSubtitle: {
+    color: '#94A3B8',
+    fontSize: 12,
+    marginTop: 2,
+  },
+  completeActionsRow: {
+    flexDirection: 'row',
+    gap: 10,
+    marginTop: 4,
+  },
+  addNextExBtn: {
+    flex: 1,
+    backgroundColor: '#A3E635',
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+    paddingVertical: 12,
+    paddingHorizontal: 12,
+    borderRadius: 12,
+  },
+  addNextExText: {
+    color: '#0A0A0A',
+    fontSize: 13,
+    fontWeight: '700',
+  },
+  finishWorkoutPromptBtn: {
+    backgroundColor: '#27272A',
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    borderRadius: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1,
+    borderColor: '#3F3F46',
+  },
+  finishWorkoutPromptText: {
+    color: '#F8FAFC',
+    fontSize: 13,
+    fontWeight: '600',
   },
 });
 

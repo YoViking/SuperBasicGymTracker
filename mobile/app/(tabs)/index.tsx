@@ -7,6 +7,7 @@ import {
   TouchableOpacity,
   ActivityIndicator,
   RefreshControl,
+  Animated,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Image } from 'expo-image';
@@ -18,16 +19,46 @@ import { getMuscleGroupImage, getDefaultWorkoutImage, isAiFolder, isAiWorkout } 
 import { Workout } from '../../src/types';
 import { cacheService } from '../../src/services/cacheService';
 import { useAuth } from '../../src/context/AuthContext';
+import { useWorkoutSession } from '../../src/context/WorkoutSessionContext';
 import { onboardingService } from '../../src/services/onboardingService';
 import OnboardingWizard from '../../src/components/onboarding/OnboardingWizard';
+import QuickStartFab from '../../src/components/QuickStartFab';
 
 export default function HomeScreen() {
   const router = useRouter();
   const { user } = useAuth();
+  const { isWorkoutActive } = useWorkoutSession();
   const weeklyStats = useWeeklyStats();
   const homeData = useHomeData();
   const [refreshing, setRefreshing] = React.useState(false);
   const [showOnboarding, setShowOnboarding] = React.useState(false);
+
+  const fabTranslateY = React.useRef(new Animated.Value(0)).current;
+  const lastScrollY = React.useRef(0);
+
+  const handleScroll = (event: any) => {
+    const currentY = event.nativeEvent.contentOffset.y;
+    const diff = currentY - lastScrollY.current;
+
+    if (Math.abs(diff) > 8) {
+      if (diff > 0 && currentY > 40) {
+        // Scrolling down -> hide button under bottom menu
+        Animated.timing(fabTranslateY, {
+          toValue: 120,
+          duration: 200,
+          useNativeDriver: true,
+        }).start();
+      } else if (diff < 0 || currentY <= 20) {
+        // Scrolling up or at top -> show button
+        Animated.timing(fabTranslateY, {
+          toValue: 0,
+          duration: 200,
+          useNativeDriver: true,
+        }).start();
+      }
+    }
+    lastScrollY.current = currentY;
+  };
 
   React.useEffect(() => {
     if (user?.id) {
@@ -137,6 +168,8 @@ export default function HomeScreen() {
         style={styles.container}
         contentContainerStyle={styles.contentContainer}
         showsVerticalScrollIndicator={false}
+        onScroll={handleScroll}
+        scrollEventThrottle={16}
         refreshControl={
           <RefreshControl
             refreshing={refreshing}
@@ -367,6 +400,17 @@ export default function HomeScreen() {
               params: { id: folderId, name: folderName || 'AI Träningsprogram' },
             });
           }
+        }}
+      />
+
+      <QuickStartFab
+        visible={!isWorkoutActive}
+        translateY={fabTranslateY}
+        onPress={() => {
+          router.push({
+            pathname: '/(tabs)/exercises',
+            params: { mode: 'quick_start', t: Date.now().toString() },
+          });
         }}
       />
     </SafeAreaView>

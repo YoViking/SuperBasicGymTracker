@@ -53,17 +53,30 @@ export default function WorkoutDetailScreen() {
   }, [workoutUpdateSeq]);
 
   const fetchData = async () => {
-    if (!id) return;
+    if (!id || id === 'undefined') {
+      setLoading(false);
+      return;
+    }
     try {
       setLoading(true);
       
+      const targetId = Array.isArray(id) ? id[0] : id;
       const { data: workoutData, error: workoutError } = await supabase
         .from('workouts')
         .select('*')
-        .eq('id', id)
-        .single();
+        .eq('id', targetId)
+        .maybeSingle();
         
-      if (workoutError) throw workoutError;
+      if (workoutError) {
+        console.warn('Error fetching workout details:', workoutError.message);
+        return;
+      }
+
+      if (!workoutData) {
+        setLocalWorkout(null);
+        setLocalExercises([]);
+        return;
+      }
 
       if (workoutData?.folder_id) {
         const { data: folderData } = await supabase
@@ -162,6 +175,32 @@ export default function WorkoutDetailScreen() {
           <Text style={styles.loadingText}>
             {sessionSaving ? 'Sparar träningspass...' : 'Laddar träningspass...'}
           </Text>
+        </View>
+      </SafeAreaView>
+    );
+  }
+
+  if (!currentWorkout) {
+    return (
+      <SafeAreaView style={styles.safeArea}>
+        <View style={styles.topNav}>
+          <TouchableOpacity style={styles.backButton} onPress={() => router.back()}>
+            <ArrowLeft size={28} color="#F8FAFC" />
+          </TouchableOpacity>
+        </View>
+        <View style={[styles.loadingContainer, { paddingHorizontal: 24 }]}>
+          <Text style={{ color: '#F8FAFC', fontSize: 18, fontWeight: '700', marginBottom: 8, textAlign: 'center' }}>
+            Passet hittades inte
+          </Text>
+          <Text style={{ color: '#94A3B8', fontSize: 14, marginBottom: 24, textAlign: 'center' }}>
+            Detta träningspass har tagits bort eller är inte tillgängligt.
+          </Text>
+          <TouchableOpacity
+            style={{ backgroundColor: '#A3E635', paddingHorizontal: 24, paddingVertical: 12, borderRadius: 12 }}
+            onPress={() => router.back()}
+          >
+            <Text style={{ color: '#0A0A0A', fontWeight: '700', fontSize: 15 }}>Tillbaka</Text>
+          </TouchableOpacity>
         </View>
       </SafeAreaView>
     );

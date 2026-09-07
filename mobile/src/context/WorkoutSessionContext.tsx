@@ -61,7 +61,12 @@ interface WorkoutSessionContextType {
   handlePreviousExercise: () => void;
   toggleSetStatus: (setId: string, currentStatus: boolean) => void;
   handleUpdateSet: (setId: string, reps: number, weight: number) => Promise<void>;
-  finishWorkout: () => Promise<void>;
+  nameModalVisible: boolean;
+  openNameModal: () => void;
+  closeNameModal: () => void;
+  startQuickWorkout: (exercise: any) => Promise<void>;
+  addExerciseToActiveWorkout: (exercise: any) => Promise<void>;
+  finishWorkout: (customWorkoutName?: string) => Promise<void>;
   discardWorkout: () => void;
   openExerciseOptions: (exerciseId: string, workoutId?: string, muscleGroup?: string) => void;
   closeExerciseOptions: () => void;
@@ -80,6 +85,8 @@ export function WorkoutSessionProvider({ children }: { children: React.ReactNode
   const router = useRouter();
 
   const [activeWorkout, setActiveWorkout] = useState<Workout | null>(null);
+  const activeWorkoutRef = useRef<Workout | null>(null);
+  activeWorkoutRef.current = activeWorkout;
   const [groupedExercises, setGroupedExercises] = useState<GroupedExercise[]>([]);
   const [activeExerciseId, setActiveExerciseId] = useState<string | null>(null);
   const [isPlayerExpanded, setIsPlayerExpanded] = useState(false);
@@ -94,6 +101,9 @@ export function WorkoutSessionProvider({ children }: { children: React.ReactNode
   const [optionsExerciseId, setOptionsExerciseId] = useState<string | null>(null);
   const [optionsWorkoutId, setOptionsWorkoutId] = useState<string | null>(null);
   const [optionsMuscleGroup, setOptionsMuscleGroup] = useState<string | null>(null);
+  const [nameModalVisible, setNameModalVisible] = useState(false);
+  const openNameModal = useCallback(() => setNameModalVisible(true), []);
+  const closeNameModal = useCallback(() => setNameModalVisible(false), []);
   const [workoutUpdateSeq, setWorkoutUpdateSeq] = useState(0);
 
   const triggerWorkoutUpdate = useCallback(() => {
@@ -173,6 +183,7 @@ export function WorkoutSessionProvider({ children }: { children: React.ReactNode
     setIsWorkoutActive(false);
     setWorkoutTimeElapsed(0);
     setOptionsModalVisible(false);
+    setNameModalVisible(false);
     setOptionsExerciseId(null);
     setOptionsWorkoutId(null);
   }, []);
@@ -203,6 +214,10 @@ export function WorkoutSessionProvider({ children }: { children: React.ReactNode
       if (totalSets > 0 && completedSets === totalSets && newStatus === true) {
         setTimeout(() => {
           setIsPlayerExpanded(false);
+          const currentWorkout = activeWorkoutRef.current;
+          if (currentWorkout?.id) {
+            router.push(`/workout/${currentWorkout.id}`);
+          }
           if (Platform.OS === 'android') {
             ToastAndroid.show('Alla övningar klara! Scrolla ner och Slutför för att spara.', ToastAndroid.LONG);
           }
@@ -210,7 +225,7 @@ export function WorkoutSessionProvider({ children }: { children: React.ReactNode
       }
       return newState;
     });
-  }, []);
+  }, [router]);
 
   const handleUpdateSet = useCallback(async (setId: string, reps: number, weight: number) => {
     setGroupedExercises(prev => prev.map(group => ({
@@ -377,14 +392,165 @@ export function WorkoutSessionProvider({ children }: { children: React.ReactNode
     }
   }, [optionsWorkoutId, activeWorkout, optionsExerciseId, activeExerciseId, groupedExercises, closeExerciseOptions]);
 
+  const startQuickWorkout = useCallback(async (exercise: any) => {
+    try {
+      setIsSaving(true);
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) throw new Error('Du är inte inloggad');
+
+      const todayStr = new Date().toLocaleDateString('sv-SE', {
+        day: 'numeric',
+        month: 'short',
+      });
+      const workoutName = `Pass ${todayStr}`;
+
+      const { data: newWorkout, error: wError } = await supabase
+        .from('workouts')
+        .insert([{
+          name: workoutName,
+          user_id: user.id
+        }])
+        .select()
+        .single();
+
+      if (wError) throw wError;
+
+      const setsToInsert = [1, 2, 3].map(setNum => ({
+        workout_id: newWorkout.id,
+        exercise_id: exercise.id,
+        sets: setNum,
+        reps: 10,
+        weight: 0,
+        is_done: false,
+        order_index: 0
+      }));
+
+      const { data: insertedSets, error: sError } = await supabase
+        .from('workout_exercises')
+        .insert(setsToInsert)
+        .select();
+
+      if (sError) throw sError;
+
+      const group: GroupedExercise = {
+        exerciseId: exercise.id,
+        exerciseName: exercise.name,
+        muscleGroup: exercise.muscle_group || 'Other',
+        equipment: exercise.equipment,
+        gifUrl: exercise.gifUrl,
+        sets: (insertedSets || []).map((s: any) => ({
+          ...s,
+          exercise: {
+            name: exercise.name,
+            muscle_group: exercise.muscle_group || 'Other',
+            gifUrl: exercise.gifUrl,
+            equipment: exercise.equipment,
+          }
+        })),
+        order_index: 0
+      };
+
+      startWorkout(newWorkout, [group], exercise.id);
+      triggerWorkoutUpdate();
+
+      if (Platform.OS === 'android') {
+        ToastAndroid.show('Pass påbörjat!', ToastAndroid.SHORT);
+      }
+    } catch (err: any) {
+      console.error('Error starting quick workout:', err);
+      if (Platform.OS === 'android') {
+        ToastAndroid.show(err.message || 'Kunde inte starta pass', ToastAndroid.SHORT);
+      }
+    } finally {
+      setIsSaving(false);
+    }
+  }, [startWorkout, triggerWorkoutUpdate]);
+
+  const addExerciseToActiveWorkout = useCallback(async (exercise: any) => {
+    if (!activeWorkout) return;
+    try {
+      setIsSaving(true);
+      const nextOrderIndex = groupedExercises.length;
+      const setsToInsert = [1, 2, 3].map(setNum => ({
+        workout_id: activeWorkout.id,
+        exercise_id: exercise.id,
+        sets: setNum,
+        reps: 10,
+        weight: 0,
+        is_done: false,
+        order_index: nextOrderIndex
+      }));
+
+      const { data: insertedSets, error: sError } = await supabase
+        .from('workout_exercises')
+        .insert(setsToInsert)
+        .select();
+
+      if (sError) throw sError;
+
+      const group: GroupedExercise = {
+        exerciseId: exercise.id,
+        exerciseName: exercise.name,
+        muscleGroup: exercise.muscle_group || 'Other',
+        equipment: exercise.equipment,
+        gifUrl: exercise.gifUrl,
+        sets: (insertedSets || []).map((s: any) => ({
+          ...s,
+          exercise: {
+            name: exercise.name,
+            muscle_group: exercise.muscle_group || 'Other',
+            gifUrl: exercise.gifUrl,
+            equipment: exercise.equipment,
+          }
+        })),
+        order_index: nextOrderIndex
+      };
+
+      setGroupedExercises(prev => [...prev, group]);
+
+      if (!activeExerciseId) {
+        setActiveExerciseId(exercise.id);
+      }
+
+      setIsPlayerExpanded(true);
+      triggerWorkoutUpdate();
+
+      if (Platform.OS === 'android') {
+        ToastAndroid.show(`${exercise.name} tillagd i passet!`, ToastAndroid.SHORT);
+      }
+    } catch (err: any) {
+      console.error('Error adding exercise to active workout:', err);
+      if (Platform.OS === 'android') {
+        ToastAndroid.show('Kunde inte lägga till övning', ToastAndroid.SHORT);
+      }
+    } finally {
+      setIsSaving(false);
+    }
+  }, [activeWorkout, groupedExercises.length, activeExerciseId, triggerWorkoutUpdate]);
+
   const isSavingRef = useRef(false);
 
-  const finishWorkout = useCallback(async () => {
+  const finishWorkout = useCallback(async (customWorkoutName?: string) => {
     if (isSavingRef.current || !activeWorkout) return;
     try {
       isSavingRef.current = true;
       setIsSaving(true);
       setIsWorkoutActive(false);
+
+      const todayStr = new Date().toLocaleDateString('sv-SE', {
+        day: 'numeric',
+        month: 'short',
+      });
+      const fallbackName = `Pass ${todayStr}`;
+      const finalWorkoutName = customWorkoutName?.trim() || activeWorkout.name || fallbackName;
+
+      // Update workout name in database if specified or fallback
+      if (finalWorkoutName !== activeWorkout.name) {
+        await supabase
+          .from('workouts')
+          .update({ name: finalWorkoutName })
+          .eq('id', activeWorkout.id);
+      }
 
       let totalVolume = 0;
       let totalReps = 0;
@@ -436,7 +602,7 @@ export function WorkoutSessionProvider({ children }: { children: React.ReactNode
         .insert({
           user_id: user.id,
           workout_id: activeWorkout.id,
-          workout_name: activeWorkout.name,
+          workout_name: finalWorkoutName,
           duration_seconds: workoutTimeElapsed,
           total_volume: totalVolume
         })
@@ -459,7 +625,7 @@ export function WorkoutSessionProvider({ children }: { children: React.ReactNode
       }
 
       setSummaryData({
-        workoutName: activeWorkout.name,
+        workoutName: finalWorkoutName,
         durationSeconds: workoutTimeElapsed,
         totalReps,
         totalVolume,
@@ -472,6 +638,7 @@ export function WorkoutSessionProvider({ children }: { children: React.ReactNode
 
       setIsPlayerExpanded(false);
       setOptionsModalVisible(false);
+      setNameModalVisible(false);
       setSummaryModalVisible(true);
     } catch (error: any) {
       console.error('Error saving workout:', error);
@@ -516,6 +683,11 @@ export function WorkoutSessionProvider({ children }: { children: React.ReactNode
         handlePreviousExercise,
         toggleSetStatus,
         handleUpdateSet,
+        nameModalVisible,
+        openNameModal,
+        closeNameModal,
+        startQuickWorkout,
+        addExerciseToActiveWorkout,
         finishWorkout,
         discardWorkout,
         openExerciseOptions,
