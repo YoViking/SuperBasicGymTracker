@@ -255,20 +255,51 @@ export default function WorkoutEditScreen() {
     <TouchableOpacity
       style={styles.emptyContainer}
       activeOpacity={0.7}
-      onPress={() => router.push('/(tabs)/exercises')}
+      onPress={() =>
+        router.push({
+          pathname: '/(tabs)/exercises',
+          params: {
+            mode: 'add_to_template',
+            target_workout_id: id,
+            t: Date.now().toString(),
+          },
+        })
+      }
     >
       <View style={styles.emptyIconCircle}>
         <Plus size={22} color="#A3E635" />
       </View>
       <Text style={styles.emptyText}>
-        Denna workout är tom. Lägg till en övning genom att trycka på{' '}
-        <Text style={styles.emptyHighlight}>"+ Lägg till i workout"</Text>
+        Detta pass är tomt. Tryck nedan för att välja övningar.
       </Text>
       <View style={styles.emptyButton}>
-        <Text style={styles.emptyButtonText}>Bläddra bland övningar</Text>
+        <Text style={styles.emptyButtonText}>Lägg till övning</Text>
       </View>
     </TouchableOpacity>
   );
+
+  const renderFooter = () => {
+    if (groupedExercises.length === 0) return null;
+    return (
+      <TouchableOpacity
+        style={styles.addMoreButton}
+        activeOpacity={0.8}
+        onPress={() =>
+          router.push({
+            pathname: '/(tabs)/exercises',
+            params: {
+              mode: 'add_to_template',
+              target_workout_id: id,
+              t: Date.now().toString(),
+            },
+          })
+        }
+      >
+        <Plus size={18} color="#A3E635" style={{ marginRight: 6 }} />
+        <Text style={styles.addMoreButtonText}>Lägg till övning</Text>
+      </TouchableOpacity>
+    );
+  };
 
   return (
     <GestureHandlerRootView style={{ flex: 1 }}>
@@ -277,6 +308,7 @@ export default function WorkoutEditScreen() {
           data={groupedExercises}
           ListHeaderComponent={renderHeader()}
           ListEmptyComponent={renderEmptyState()}
+          ListFooterComponent={renderFooter()}
           onDragEnd={({ data }) => onDragEnd(data)}
           keyExtractor={(item, index) => item.exerciseId || index.toString()}
           renderItem={renderGroup}
@@ -481,6 +513,24 @@ const styles = StyleSheet.create({
   emptyButtonText: {
     color: '#A3E635',
     fontSize: 13,
+    fontWeight: '700',
+  },
+  addMoreButton: {
+    marginHorizontal: 16,
+    marginTop: 20,
+    marginBottom: 40,
+    backgroundColor: '#18181B',
+    borderWidth: 1.5,
+    borderColor: '#27272A',
+    borderRadius: 14,
+    paddingVertical: 14,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  addMoreButtonText: {
+    color: '#F8FAFC',
+    fontSize: 15,
     fontWeight: '700',
   },
 });

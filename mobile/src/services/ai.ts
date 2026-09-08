@@ -506,6 +506,327 @@ export async function saveProgramToDatabase(
   }
 }
 
+/**
+ * Generates a single AI workout session tailored to user constraints.
+ */
+export async function fetchAISingleWorkout(inputs: {
+  workoutName?: string;
+  focus: string;
+  duration: string;
+  equipment: string[];
+  location?: string;
+  injuries?: string[];
+  exclusions?: string;
+  fitnessGoal?: string;
+}): Promise<GeneratedWorkout> {
+  const { workoutName, focus, duration, equipment, location = 'Gym', injuries = [], exclusions = '', fitnessGoal = 'Muskeltillväxt' } = inputs;
+
+  const geminiKey = process.env.EXPO_PUBLIC_GEMINI_API_KEY || process.env.GEMINI_API_KEY;
+  const opencodeKey = process.env.EXPO_PUBLIC_OPENCODE_API_KEY || process.env.OPENCODE_API_KEY;
+  const opencodeModel = process.env.EXPO_PUBLIC_OPENCODE_MODEL || process.env.OPENCODE_MODEL || 'mimo-v2.5-free';
+
+  const activeGeminiKey = geminiKey || (opencodeKey && opencodeKey.startsWith('AIza') ? opencodeKey : null);
+  const activeOpenCodeKey = !activeGeminiKey && opencodeKey && opencodeKey !== 'your_opencode_api_key_here' ? opencodeKey : null;
+
+  const durNum = parseInt(duration) || 45;
+  let targetCount = 5;
+  if (durNum <= 30) targetCount = 4;
+  else if (durNum <= 45) targetCount = 5;
+  else if (durNum <= 60) targetCount = 6;
+  else targetCount = 8;
+
+  if (!activeGeminiKey && !activeOpenCodeKey) {
+    console.log('No AI key found. Using mock single workout generator.');
+    return generateMockSingleWorkout(inputs, targetCount);
+  }
+
+  try {
+    const systemPrompt = `You are an elite strength & conditioning coach.
+Generate a single, highly effective, balanced workout routine for the user.
+Strictly avoid exercises that strain reported injury areas:
+- If 'Wrists' is flagged: Avoid barbell wrist-heavy exercises, heavy front squats, or traditional bench press where heavy wrist extension occurs. Substitute with safer alternatives like neutral-grip dumbbells or machines.
+- If 'Knees' is flagged: Avoid heavy squats, lunges, leg extensions. Substitute with box squats, leg curls, or glute bridges.
+- If 'Shoulders' is flagged: Avoid overhead presses, traditional bench press, or dips. Substitute with incline dumbbell presses, landmine presses, or chest press machines.
+- If 'Lower Back' is flagged: Avoid heavy deadlifts, bent-over rows, or back squats. Substitute with chest-supported rows, leg presses, or hip thrusts.
+- If 'Elbows' is flagged: Avoid skull crushers, heavy tricep pushdowns, or chin-ups. Substitute with neutral grip pushdowns, hammer curls, or light extensions.
+- If 'Ankles' is flagged: Avoid calf raises with heavy extension, deep squats, or running. Substitute with leg presses, seated calf raises, or swimming/cycling (cardio).
+
+Constraints:
+- Location: ${location}
+- Focus / Muscles: ${focus}
+- Duration: ~${duration} (${targetCount} exercises total)
+- Available Equipment: ${equipment.join(', ') || 'All standard equipment'}
+- Sensitive / Injured areas: ${injuries.join(', ') || 'None'}
+- Specific Exclusions: ${exclusions || 'None'}
+- Goal: ${fitnessGoal}
+
+Avoid any exercise that compromises flagged injuries.
+Return ONLY valid JSON with this exact structure:
+{
+  "dayName": "${workoutName || focus + ' - AI'}",
+  "targetFocus": "${focus}",
+  "estimatedDurationMinutes": ${durNum},
+  "exercises": [
+    {
+      "exerciseName": "Standard English exercise name (e.g. Barbell Bench Press)",
+      "targetMuscle": "Chest, Back, Legs, Arms, Shoulders, or Core",
+      "equipment": "body only, machine, kettlebells, dumbbell, cable, barbell, or bands",
+      "sets": 3,
+      "reps": "8-12",
+      "restSeconds": 90,
+      "notes": "Coaching cue or execution tip"
+    }
+  ]
+}`;
+
+    let content: string | null = null;
+    if (activeGeminiKey) {
+      const response = await fetch(
+        `https://generativelanguage.googleapis.com/v1beta/models/gemini-3.6-flash:generateContent?key=${activeGeminiKey}`,
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            contents: [{ role: 'user', parts: [{ text: systemPrompt }] }],
+            generationConfig: { responseMimeType: 'application/json' },
+          }),
+        }
+      );
+      if (response.ok) {
+        const geminiData = await response.json();
+        content = geminiData.candidates?.[0]?.content?.parts?.[0]?.text || null;
+      }
+    } else if (activeOpenCodeKey) {
+      const response = await fetch('https://opencode.ai/zen/v1/chat/completions', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${activeOpenCodeKey}`,
+        },
+        body: JSON.stringify({
+          model: opencodeModel,
+          messages: [{ role: 'system', content: systemPrompt }],
+          response_format: { type: 'json_object' }
+        }),
+      });
+      if (response.ok) {
+        const data = await response.json();
+        content = data.choices?.[0]?.message?.content || null;
+      }
+    }
+
+    if (!content) {
+      return generateMockSingleWorkout(inputs, targetCount);
+    }
+
+    const parsed = JSON.parse(content);
+    return {
+      dayName: parsed.dayName || workoutName || `${focus} AI`,
+      targetFocus: parsed.targetFocus || focus,
+      estimatedDurationMinutes: parsed.estimatedDurationMinutes || durNum,
+      exercises: (parsed.exercises || []).map((ex: any) => ({
+        exerciseName: ex.exerciseName || ex.name || 'Övning',
+        targetMuscle: ex.targetMuscle || 'Other',
+        equipment: ex.equipment || 'body only',
+        sets: parseInt(ex.sets) || 3,
+        reps: String(ex.reps || '8-12'),
+        restSeconds: parseInt(ex.restSeconds) || 60,
+        notes: ex.notes || ''
+      }))
+    };
+  } catch (err) {
+    console.warn('AI generation error, falling back to mock workout:', err);
+    return generateMockSingleWorkout(inputs, targetCount);
+  }
+}
+
+/**
+ * Maps a single generated AI workout to the database exercise library.
+ */
+export async function mapWorkoutToLibrary(workout: GeneratedWorkout): Promise<MatchedWorkout> {
+  const { data: libraryData, error: libraryError } = await supabase
+    .from('exercise_library')
+    .select('*')
+    .limit(3000);
+
+  if (libraryError) {
+    console.error('Error fetching exercise library for matcher:', libraryError);
+  }
+
+  const library = (libraryData || []) as ExerciseLibrary[];
+
+  const matchedExercises = (workout.exercises || []).map(ex => {
+    const match = findBestExerciseMatch(ex.exerciseName, ex.targetMuscle, ex.equipment, library);
+    return {
+      ...ex,
+      matchedExerciseId: match ? match.id : null,
+      matchedExerciseName: match ? match.name : ex.exerciseName,
+      matchedGifUrl: match ? match.gifUrl || null : null
+    };
+  });
+
+  return {
+    ...workout,
+    exercises: matchedExercises
+  };
+}
+
+/**
+ * Saves a single matched workout to Supabase and returns the workout ID.
+ */
+export async function saveSingleWorkoutToDatabase(
+  matchedWorkout: MatchedWorkout,
+  userId: string,
+  folderId?: string | null
+): Promise<string> {
+  if (!userId) throw new Error('User must be logged in to save a workout.');
+
+  let { data: workout, error: workoutError } = await supabase
+    .from('workouts')
+    .insert([{
+      name: matchedWorkout.dayName,
+      folder_id: folderId || null,
+      user_id: userId,
+      is_ai: true
+    }])
+    .select()
+    .single();
+
+  if (workoutError && workoutError.message.includes('is_ai')) {
+    const fallback = await supabase
+      .from('workouts')
+      .insert([{
+        name: matchedWorkout.dayName,
+        folder_id: folderId || null,
+        user_id: userId
+      }])
+      .select()
+      .single();
+    workout = fallback.data;
+    workoutError = fallback.error;
+  }
+
+  if (workoutError || !workout) {
+    throw new Error(`Failed to create workout: ${workoutError?.message}`);
+  }
+
+  const setsToInsert: any[] = [];
+  matchedWorkout.exercises.forEach((ex, exIndex) => {
+    if (ex.matchedExerciseId) {
+      const reps = parseReps(ex.reps);
+      const notes = `${ex.notes || ''} (Vila: ${ex.restSeconds || 60}s)`.trim();
+      for (let i = 0; i < ex.sets; i++) {
+        setsToInsert.push({
+          workout_id: workout.id,
+          exercise_id: ex.matchedExerciseId,
+          sets: i + 1,
+          reps: reps,
+          weight: 0,
+          is_done: false,
+          notes: notes,
+          order_index: exIndex
+        });
+      }
+    }
+  });
+
+  if (setsToInsert.length > 0) {
+    const { error: exercisesError } = await supabase
+      .from('workout_exercises')
+      .insert(setsToInsert);
+
+    if (exercisesError) {
+      throw new Error(`Failed to insert workout exercises: ${exercisesError.message}`);
+    }
+  }
+
+  cacheService.invalidate('workouts', userId);
+  cacheService.invalidate('home', userId);
+
+  return workout.id;
+}
+
+function generateMockSingleWorkout(inputs: {
+  workoutName?: string;
+  focus: string;
+  duration: string;
+  equipment: string[];
+  injuries?: string[];
+  exclusions?: string;
+  fitnessGoal?: string;
+}, targetCount: number): GeneratedWorkout {
+  const { workoutName, focus, duration, fitnessGoal = 'Muskeltillväxt' } = inputs;
+  const durNum = parseInt(duration) || 45;
+
+  // Use standard high quality exercise presets based on focus
+  const focusLower = focus.toLowerCase();
+  const list: Array<{ name: string; muscle: string; eq: string; notes: string }> = [];
+
+  if (focusLower.includes('bröst') || focusLower.includes('chest') || focusLower.includes('push')) {
+    list.push(
+      { name: 'Barbell Bench Press', muscle: 'Chest', eq: 'barbell', notes: 'Kontrollerad sänkning, stabil bana' },
+      { name: 'Incline Dumbbell Bench Press', muscle: 'Chest', eq: 'dumbbell', notes: 'Fokus på övre bröstmuskeln' },
+      { name: 'Cable Crossover', muscle: 'Chest', eq: 'cable', notes: 'Maximal kontraktion i toppläget' },
+      { name: 'Triceps Pushdown', muscle: 'Arms', eq: 'cable', notes: 'Lås armbågarna intill kroppen' },
+      { name: 'Overhead Dumbbell Extension', muscle: 'Arms', eq: 'dumbbell', notes: 'Djup stretch i triceps långa huvud' },
+      { name: 'Push-Up', muscle: 'Chest', eq: 'body only', notes: 'Explosivt upp, strikt bålspänning' }
+    );
+  } else if (focusLower.includes('rygg') || focusLower.includes('back') || focusLower.includes('pull')) {
+    list.push(
+      { name: 'Bent-Over Barbell Row', muscle: 'Back', eq: 'barbell', notes: 'Dra stången mot nedre delen av magen' },
+      { name: 'Lat Pulldown', muscle: 'Back', eq: 'cable', notes: 'Dra ned mot bröstbenet med sänkta axlar' },
+      { name: 'One-Arm Dumbbell Row', muscle: 'Back', eq: 'dumbbell', notes: 'Stöd på bänk, full sträckning och drag' },
+      { name: 'Barbell Bicep Curl', muscle: 'Arms', eq: 'barbell', notes: 'Strikt utförande utan att gunga' },
+      { name: 'Hammer Curls', muscle: 'Arms', eq: 'dumbbell', notes: 'Tränar brachialis och underarmar' },
+      { name: 'Face Pulls', muscle: 'Shoulders', eq: 'cable', notes: 'Utmärkt för baksida axlar och hållning' }
+    );
+  } else if (focusLower.includes('ben') || focusLower.includes('legs') || focusLower.includes('rumpa')) {
+    list.push(
+      { name: 'Barbell Squat', muscle: 'Legs', eq: 'barbell', notes: 'Djup kontrollerad knäböj med rak rygg' },
+      { name: 'Romanian Deadlift', muscle: 'Legs', eq: 'barbell', notes: 'Häng i höften, stretch i hamstrings' },
+      { name: 'Leg Press', muscle: 'Legs', eq: 'machine', notes: 'Placera fötterna axelbrett' },
+      { name: 'Lying Leg Curls', muscle: 'Legs', eq: 'machine', notes: 'Isolerar baksida lår effektivt' },
+      { name: 'Standing Calf Raises', muscle: 'Legs', eq: 'machine', notes: 'Full sträckning och toppstopp' },
+      { name: 'Walking Lunges', muscle: 'Legs', eq: 'dumbbell', notes: 'Stabila kliv med bra knäkontroll' }
+    );
+  } else if (focusLower.includes('axlar') || focusLower.includes('shoulders') || focusLower.includes('arm')) {
+    list.push(
+      { name: 'Overhead Barbell Press', muscle: 'Shoulders', eq: 'barbell', notes: 'Pressa rakt upp, spänn bålen' },
+      { name: 'Dumbbell Lateral Raise', muscle: 'Shoulders', eq: 'dumbbell', notes: 'Led med armbågarna för utsida axel' },
+      { name: 'Incline Dumbbell Bicep Curl', muscle: 'Arms', eq: 'dumbbell', notes: 'Optimal stretch i bottenläget' },
+      { name: 'Triceps Rope Pushdown', muscle: 'Arms', eq: 'cable', notes: 'Dela repet i botten för toppkontraktion' },
+      { name: 'Rear Delt Fly', muscle: 'Shoulders', eq: 'machine', notes: 'Baksida axlar' },
+      { name: 'Hammer Curls', muscle: 'Arms', eq: 'dumbbell', notes: 'Greppstyrka och armvolym' }
+    );
+  } else {
+    // Helkropp / Allmän
+    list.push(
+      { name: 'Barbell Squat', muscle: 'Legs', eq: 'barbell', notes: 'Underkroppsbas' },
+      { name: 'Barbell Bench Press', muscle: 'Chest', eq: 'barbell', notes: 'Överkroppspress' },
+      { name: 'Lat Pulldown', muscle: 'Back', eq: 'cable', notes: 'Ryggbredd och drag' },
+      { name: 'Dumbbell Shoulder Press', muscle: 'Shoulders', eq: 'dumbbell', notes: 'Axelstyrka' },
+      { name: 'Barbell Bicep Curl', muscle: 'Arms', eq: 'barbell', notes: 'Armisolering' },
+      { name: 'Hanging Leg Raise', muscle: 'Core', eq: 'body only', notes: 'Bål och mage' }
+    );
+  }
+
+  const selected = list.slice(0, targetCount);
+  return {
+    dayName: workoutName || `${focus} (AI)`,
+    targetFocus: focus,
+    estimatedDurationMinutes: durNum,
+    exercises: selected.map(item => ({
+      exerciseName: item.name,
+      targetMuscle: item.muscle,
+      equipment: item.eq,
+      sets: 3,
+      reps: '8-12',
+      restSeconds: 90,
+      notes: item.notes
+    }))
+  };
+}
+
 // -------------------------------------------------------------
 // High-Fidelity Client-Side Mock Program Generator
 // -------------------------------------------------------------

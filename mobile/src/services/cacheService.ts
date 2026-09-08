@@ -32,7 +32,12 @@ export const cacheService = {
    */
   get<T>(key: string, userId: string, ttlMs: number = DEFAULT_TTL_MS): T | null {
     const fullKey = `${userId}:${key}`;
-    if (invalidatedKeys.has(fullKey) || invalidatedKeys.has(`${userId}:all`)) {
+    if (
+      invalidatedKeys.has(fullKey) || 
+      invalidatedKeys.has(`${userId}:all`) ||
+      invalidatedKeys.has(`*:${key}`) ||
+      invalidatedKeys.has('*:all')
+    ) {
       return null;
     }
 
@@ -50,7 +55,12 @@ export const cacheService = {
    */
   async getAsync<T>(key: string, userId: string, ttlMs: number = DEFAULT_TTL_MS): Promise<T | null> {
     const fullKey = `${userId}:${key}`;
-    if (invalidatedKeys.has(fullKey) || invalidatedKeys.has(`${userId}:all`)) {
+    if (
+      invalidatedKeys.has(fullKey) || 
+      invalidatedKeys.has(`${userId}:all`) ||
+      invalidatedKeys.has(`*:${key}`) ||
+      invalidatedKeys.has('*:all')
+    ) {
       return null;
     }
 
@@ -93,6 +103,8 @@ export const cacheService = {
     memoryCache.set(fullKey, item);
     invalidatedKeys.delete(fullKey);
     invalidatedKeys.delete(`${userId}:all`);
+    invalidatedKeys.delete(`*:${key}`);
+    invalidatedKeys.delete('*:all');
 
     try {
       const storageKey = `@app_cache_${fullKey}`;
@@ -108,11 +120,14 @@ export const cacheService = {
   invalidate(category: CacheCategory, userId?: string): void {
     if (userId) {
       invalidatedKeys.add(`${userId}:${category}`);
+      memoryCache.delete(`${userId}:${category}`);
     } else {
       // Invalidate for all user contexts
-      for (const key of memoryCache.keys()) {
+      invalidatedKeys.add(`*:${category}`);
+      for (const key of Array.from(memoryCache.keys())) {
         if (category === 'all' || key.endsWith(`:${category}`)) {
           invalidatedKeys.add(key);
+          memoryCache.delete(key);
         }
       }
     }

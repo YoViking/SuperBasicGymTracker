@@ -32,6 +32,7 @@ import { ExerciseLibrary as Exercise } from '../types';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import { useBookmarks } from '../hooks/useBookmarks';
 import { useWorkoutSession } from '../context/WorkoutSessionContext';
+import { cacheService } from '../services/cacheService';
 import {
   getExerciseTarget,
   getSubMusclesForGroup,
@@ -150,7 +151,7 @@ const formatEquipmentLabel = (eq?: string): string => {
   }
 };
 
-export type ExerciseLibraryMode = 'default' | 'replace' | 'quick_start' | 'add_to_workout';
+export type ExerciseLibraryMode = 'default' | 'replace' | 'quick_start' | 'add_to_workout' | 'add_to_template';
 
 interface ExerciseLibraryProps {
   replaceMode?: boolean;
@@ -168,7 +169,7 @@ export default function ExerciseLibrary({
   onReplaceSelect,
 }: ExerciseLibraryProps = {}) {
   const router = useRouter();
-  const searchParams = useLocalSearchParams<{ mode?: string; t?: string }>();
+  const searchParams = useLocalSearchParams<{ mode?: string; t?: string; target_workout_id?: string }>();
   const { startQuickWorkout, addExerciseToActiveWorkout, isSaving, activeExercise, isPlayerExpanded } = useWorkoutSession();
 
   const [toastMessage, setToastMessage] = useState<string | null>(null);
@@ -204,6 +205,7 @@ export default function ExerciseLibrary({
     if (replaceMode) return 'replace';
     if (searchParams.mode === 'quick_start') return 'quick_start';
     if (searchParams.mode === 'add_to_workout') return 'add_to_workout';
+    if (searchParams.mode === 'add_to_template') return 'add_to_template';
     return 'default';
   });
 
@@ -216,18 +218,27 @@ export default function ExerciseLibrary({
       setActiveMode('quick_start');
     } else if (searchParams.mode === 'add_to_workout') {
       setActiveMode('add_to_workout');
+    } else if (searchParams.mode === 'add_to_template') {
+      setActiveMode('add_to_template');
     } else {
       setActiveMode('default');
     }
   }, [mode, replaceMode, searchParams.mode]);
 
   useEffect(() => {
-    const isQuickStart = activeMode === 'quick_start' && searchParams.mode === 'quick_start';
-    if (isQuickStart) {
+    const isSpecialSelect =
+      (activeMode === 'quick_start' && searchParams.mode === 'quick_start') ||
+      (activeMode === 'add_to_template' && searchParams.mode === 'add_to_template');
+
+    if (isSpecialSelect) {
       const currentT = searchParams.t || 'initial';
       if (lastToastTimestamp.current !== currentT) {
         lastToastTimestamp.current = currentT;
-        showToast('Välj en övning för att starta passet');
+        showToast(
+          activeMode === 'add_to_template'
+            ? 'Välj en övning att lägga till i passet'
+            : 'Välj en övning för att starta passet'
+        );
       }
     } else {
       lastToastTimestamp.current = null;
@@ -488,6 +499,49 @@ export default function ExerciseLibrary({
       router.setParams({ mode: 'default' });
       await addExerciseToActiveWorkout(exercise);
       router.back();
+    } else if (activeMode === 'add_to_template' && searchParams.target_workout_id) {
+      const workoutId = searchParams.target_workout_id;
+      setActiveMode('default');
+      router.setParams({ mode: 'default', target_workout_id: undefined });
+
+      try {
+        const { data: existing } = await supabase
+          .from('workout_exercises')
+          .select('order_index')
+          .eq('workout_id', workoutId)
+          .order('order_index', { ascending: false })
+          .limit(1);
+
+        const nextOrderIndex = existing && existing.length > 0 ? (existing[0].order_index ?? 0) + 1 : 0;
+
+        const setsToInsert = [1, 2, 3].map(setNum => ({
+          workout_id: workoutId,
+          exercise_id: exercise.id,
+          sets: setNum,
+          reps: 10,
+          weight: 0,
+          is_done: false,
+          order_index: nextOrderIndex,
+        }));
+
+        const { error: insError } = await supabase
+          .from('workout_exercises')
+          .insert(setsToInsert);
+
+        if (insError) throw insError;
+
+        cacheService.invalidate('workouts');
+        if (Platform.OS === 'android') {
+          ToastAndroid.show(`${exercise.name} tillagd i passet!`, ToastAndroid.SHORT);
+        }
+
+        router.replace(`/workout/edit/${workoutId}`);
+      } catch (err) {
+        console.error('Error adding exercise to template:', err);
+        if (Platform.OS === 'android') {
+          ToastAndroid.show('Kunde inte lägga till övning', ToastAndroid.SHORT);
+        }
+      }
     } else if (replaceMode && onReplaceSelect) {
       onReplaceSelect(exercise);
     } else {
@@ -496,7 +550,10 @@ export default function ExerciseLibrary({
   };
 
   const renderExercise = ({ item }: { item: Exercise }) => {
-    const isSpecialMode = activeMode === 'quick_start' || activeMode === 'add_to_workout';
+    const isSpecialMode =
+      activeMode === 'quick_start' ||
+      activeMode === 'add_to_workout' ||
+      activeMode === 'add_to_template';
     return (
       <TouchableOpacity
         style={styles.exerciseCard}

@@ -12,6 +12,7 @@ import EditFolderModal from '../../src/components/EditFolderModal';
 import { Image } from 'expo-image';
 import { getMuscleGroupImage, getDefaultWorkoutImage, isAiFolder, isAiWorkout } from '../../src/utils/images';
 import { decode } from 'base64-arraybuffer';
+import { cacheService } from '../../src/services/cacheService';
 
 export default function FolderScreen() {
   const router = useRouter();
@@ -110,6 +111,8 @@ export default function FolderScreen() {
       
       if (error) throw error;
       setWorkouts(prev => prev.filter(w => w.id !== selectedWorkout.id));
+      cacheService.invalidate('workouts');
+      cacheService.invalidate('home');
       handleCloseMenu();
     } catch (e: any) {
       console.error(e);
@@ -144,6 +147,8 @@ export default function FolderScreen() {
       if (newFolderId !== folderId) {
          setWorkouts(prev => prev.filter(w => w.id !== selectedWorkout.id));
       }
+      cacheService.invalidate('workouts');
+      cacheService.invalidate('home');
       if (Platform.OS === 'android') ToastAndroid.show('Flyttad till program', ToastAndroid.SHORT);
       setMoveModalVisible(false);
       setSelectedWorkout(null);
@@ -185,6 +190,8 @@ export default function FolderScreen() {
       if (error) throw error;
       
       setFolders(prev => [data, ...prev]);
+      cacheService.invalidate('workouts');
+      cacheService.invalidate('home');
       setCreateModalVisible(false);
       
       if (selectedWorkout) {
@@ -237,6 +244,8 @@ export default function FolderScreen() {
 
       // Update local state
       setFolders(prev => prev.map(f => f.id === folderId ? { ...f, name: newName, description: newDescription, image_url: image_url || undefined } : f));
+      cacheService.invalidate('workouts');
+      cacheService.invalidate('home');
       setEditModalVisible(false);
       if (Platform.OS === 'android') ToastAndroid.show('Programmet har uppdaterats', ToastAndroid.SHORT);
     } catch (e: any) {
@@ -280,6 +289,10 @@ export default function FolderScreen() {
       // 3. Update local state
       setFolders(prev => prev.filter(f => f.id !== folderId));
       setEditModalVisible(false);
+
+      // Invalidate cache immediately so all screens (SavedWorkouts, Home, etc.) reflect the deletion
+      cacheService.invalidate('workouts');
+      cacheService.invalidate('home');
 
       if (Platform.OS === 'android') {
         ToastAndroid.show('Programmet har raderats', ToastAndroid.SHORT);
