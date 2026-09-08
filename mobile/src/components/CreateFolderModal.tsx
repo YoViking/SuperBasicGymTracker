@@ -122,7 +122,7 @@ export default function CreateFolderModal({ visible, onClose, onCreate }: Create
                   <Text style={styles.imagePickerText}>Lägg till bild</Text>
                 </TouchableOpacity>
               )}
-              
+
               <View style={styles.buttonContainer}>
                 <TouchableOpacity onPress={handleClose} style={styles.button}>
                   <Text style={styles.cancelButtonText}>AVBRYT</Text>
