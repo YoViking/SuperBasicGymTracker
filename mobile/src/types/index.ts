@@ -51,6 +51,7 @@ export interface ExerciseLibrary {
   target_muscle?: string;
   target_muscle_sv?: string;
   link?: string;
+  video_url?: string;
   gifUrl?: string;
   completions_count?: number;
   equipment?: string;
