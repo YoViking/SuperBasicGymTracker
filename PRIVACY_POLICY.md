@@ -1,6 +1,6 @@
 # Integritetspolicy för Workout Player
 
-**Senast uppdaterad:** 22 augusti 2026  
+**Senast uppdaterad:** September 2026  
 **Utvecklare:** Joakim Viking  
 **Kontakt:** joakim.viking@gmail.com  
 **Applikation:** Workout Player (Android / iOS)

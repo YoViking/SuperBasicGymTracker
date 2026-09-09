@@ -2,7 +2,7 @@
 
 **Appnamn:** Workout Player  
 **Utvecklare:** Joakim Viking  
-**Senast uppdaterad:** Augusti 2026  
+**Senast uppdaterad:** September 2026  
 
 ---
 
