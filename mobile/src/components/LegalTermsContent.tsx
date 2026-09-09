@@ -8,7 +8,7 @@ export default function LegalTermsContent() {
       {/* Hero Badge */}
       <View style={styles.heroBadge}>
         <ShieldCheck size={20} color="#A3E635" />
-        <Text style={styles.heroBadgeText}>Senast uppdaterad: Augusti 2026</Text>
+        <Text style={styles.heroBadgeText}>Senast uppdaterad: September 2026</Text>
       </View>
 
       <Text style={styles.mainTitle}>Användarvillkor & Integritet</Text>
@@ -112,7 +112,7 @@ export default function LegalTermsContent() {
       {/* Footer disclaimer */}
       <View style={styles.footer}>
         <Text style={styles.footerText}>Workout Player • Utvecklad med stolthet av Joakim Viking</Text>
-        <Text style={styles.footerSubText}>Version 1.0.0 (Production Build)</Text>
+        <Text style={styles.footerSubText}>Version 1.1.0 (Production Build)</Text>
       </View>
     </View>
   );

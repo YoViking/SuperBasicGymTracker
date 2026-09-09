@@ -66,7 +66,7 @@ export default function SettingsScreen() {
   const handleReportBug = async () => {
     const subject = encodeURIComponent('Felrapport - Workout Player');
     const body = encodeURIComponent(
-      `Beskriv felet så detaljerat som möjligt:\n\n\n---\nTeknisk information:\nAppversion: 1.0.0\nPlattform: ${Platform.OS} (${Platform.Version})\nKonto: ${userEmail || 'Ej inloggad'}`
+      `Beskriv felet så detaljerat som möjligt:\n\n\n---\nTeknisk information:\nAppversion: 1.1.0\nPlattform: ${Platform.OS} (${Platform.Version})\nKonto: ${userEmail || 'Ej inloggad'}`
     );
     const mailtoUrl = `mailto:support@workoutplayer.se?subject=${subject}&body=${body}`;
 
@@ -297,7 +297,7 @@ export default function SettingsScreen() {
 
         {/* App Version Footer */}
         <View style={styles.settingsFooter}>
-          <Text style={styles.settingsFooterText}>Workout Player v1.0.0</Text>
+          <Text style={styles.settingsFooterText}>Workout Player v1.1.0</Text>
           <Text style={styles.settingsFooterSubText}>Skapad med ❤️ av Joakim Viking</Text>
         </View>
       </ScrollView>
