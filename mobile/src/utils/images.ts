@@ -1,8 +1,63 @@
 export const DEFAULT_CUSTOM_WORKOUT_IMAGE = require('../../assets/images/default_workout_custom.jpg');
 export const DEFAULT_AI_WORKOUT_IMAGE = require('../../assets/images/default_workout_ai.jpg');
 
+export const MUSCLE_CARD_IMAGES: Record<string, { active: any; inactive: any }> = {
+  Chest: {
+    active: require('../../assets/images/muscles/chest_active.png'),
+    inactive: require('../../assets/images/muscles/chest_inactive.png'),
+  },
+  Back: {
+    active: require('../../assets/images/muscles/back_active.png'),
+    inactive: require('../../assets/images/muscles/back_inactive.png'),
+  },
+  Legs: {
+    active: require('../../assets/images/muscles/legs_active.png'),
+    inactive: require('../../assets/images/muscles/legs_inactive.png'),
+  },
+  Arms: {
+    active: require('../../assets/images/muscles/arms_active.png'),
+    inactive: require('../../assets/images/muscles/arms_inactive.png'),
+  },
+  Shoulders: {
+    active: require('../../assets/images/muscles/shoulders_active.png'),
+    inactive: require('../../assets/images/muscles/shoulders_inactive.png'),
+  },
+  Core: {
+    active: require('../../assets/images/muscles/core_active.png'),
+    inactive: require('../../assets/images/muscles/core_inactive.png'),
+  },
+  Glutes: {
+    active: require('../../assets/images/muscles/glutes_active.png'),
+    inactive: require('../../assets/images/muscles/glutes_inactive.png'),
+  },
+  Other: {
+    active: require('../../assets/images/muscles/other_active.png'),
+    inactive: require('../../assets/images/muscles/other_inactive.png'),
+  },
+  Bookmarked: {
+    active: require('../../assets/images/muscles/bookmark_active.png'),
+    inactive: require('../../assets/images/muscles/bookmark_inactive.png'),
+  },
+};
+
+export const getMuscleCardImage = (id: string, isActive: boolean = false) => {
+  const item = MUSCLE_CARD_IMAGES[id];
+  if (!item) return MUSCLE_CARD_IMAGES.Chest.inactive;
+  return isActive ? item.active : item.inactive;
+};
+
 export const getMuscleGroupImage = (muscleGroup?: string) => {
-  return require('../../assets/images/bicep.png');
+  if (!muscleGroup) return MUSCLE_CARD_IMAGES.Arms.active;
+  const mg = muscleGroup.toLowerCase().trim();
+  if (mg.includes('chest') || mg.includes('bröst') || mg.includes('pectoral')) return MUSCLE_CARD_IMAGES.Chest.active;
+  if (mg.includes('back') || mg.includes('rygg') || mg.includes('lat') || mg.includes('trap')) return MUSCLE_CARD_IMAGES.Back.active;
+  if (mg.includes('leg') || mg.includes('ben') || mg.includes('quad') || mg.includes('calf') || mg.includes('vader') || mg.includes('lår') || mg.includes('hamstring')) return MUSCLE_CARD_IMAGES.Legs.active;
+  if (mg.includes('arm') || mg.includes('bicep') || mg.includes('tricep') || mg.includes('underarm')) return MUSCLE_CARD_IMAGES.Arms.active;
+  if (mg.includes('shoulder') || mg.includes('axel') || mg.includes('axlar') || mg.includes('deltoid')) return MUSCLE_CARD_IMAGES.Shoulders.active;
+  if (mg.includes('core') || mg.includes('ab') || mg.includes('mage')) return MUSCLE_CARD_IMAGES.Core.active;
+  if (mg.includes('glute') || mg.includes('rump') || mg.includes('säte')) return MUSCLE_CARD_IMAGES.Glutes.active;
+  if (mg.includes('neck') || mg.includes('nack') || mg.includes('adductor')) return MUSCLE_CARD_IMAGES.Other.active;
+  return MUSCLE_CARD_IMAGES.Arms.active;
 };
 
 export const getDefaultWorkoutImage = (isAi?: boolean) => {

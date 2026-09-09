@@ -39,6 +39,7 @@ import {
   normalizeTargetKey,
   TARGET_DISPLAY_SV,
 } from '../utils/muscleHierarchy';
+import { getMuscleCardImage } from '../utils/images';
 
 const MUSCLE_GROUPS = ['All', 'Chest', 'Back', 'Legs', 'Arms', 'Shoulders', 'Core', 'Glutes', 'Other', 'Bookmarked'];
 
@@ -837,49 +838,53 @@ export default function ExerciseLibrary({
                       key={mg.id}
                       style={[
                         styles.muscleCard,
+                        isBookmark && styles.muscleCardBookmark,
                         isActive && styles.muscleCardActive,
                         isBookmark && !isActive && styles.bookmarkCard,
                       ]}
-                      activeOpacity={0.75}
+                      activeOpacity={0.8}
                       onPress={() => handleMuscleSelect(mg.id)}
                     >
-                      <View style={styles.muscleCardHeader}>
-                        <View
-                          style={[
-                            styles.muscleIconBox,
-                            isActive && styles.muscleIconBoxActive,
-                            isBookmark && !isActive && styles.bookmarkIconBox,
-                          ]}
-                        >
-                          {isBookmark ? (
-                            <Bookmark
-                              size={18}
-                              color="#A3E635"
-                              fill={isActive ? '#A3E635' : 'transparent'}
-                            />
-                          ) : (
-                            <Dumbbell size={18} color={isActive ? '#A3E635' : '#94A3B8'} />
-                          )}
-                        </View>
-                        {isActive && (
-                          <View style={styles.muscleCheckBadge}>
-                            <Check size={13} color="#0A0A0A" strokeWidth={3} />
-                          </View>
-                        )}
-                      </View>
-                      <Text
+                      <View
                         style={[
-                          styles.muscleCardName,
-                          isActive && styles.muscleCardNameActive,
-                          isBookmark && !isActive && styles.bookmarkCardName,
+                          styles.muscleCardTextContainer,
+                          isBookmark && styles.bookmarkCardTextContainer,
                         ]}
-                        numberOfLines={1}
                       >
-                        {mg.label}
-                      </Text>
-                      <Text style={styles.muscleCardSub} numberOfLines={1}>
-                        {mg.sub}
-                      </Text>
+                        <Text
+                          style={[
+                            styles.muscleCardName,
+                            isActive && styles.muscleCardNameActive,
+                            isBookmark && !isActive && styles.bookmarkCardName,
+                          ]}
+                          numberOfLines={1}
+                        >
+                          {mg.label}
+                        </Text>
+                        <Text
+                          style={[
+                            styles.muscleCardSub,
+                            isActive && styles.muscleCardSubActive,
+                          ]}
+                          numberOfLines={2}
+                        >
+                          {mg.sub}
+                        </Text>
+                      </View>
+
+                      <View
+                        style={[
+                          styles.muscleCardImageWrapper,
+                          isBookmark && styles.bookmarkCardImageWrapper,
+                        ]}
+                      >
+                        <Image
+                          source={getMuscleCardImage(mg.id, isActive)}
+                          style={styles.muscleCardImage}
+                          contentFit="contain"
+                          transition={150}
+                        />
+                      </View>
                     </TouchableOpacity>
                   );
                 })}
@@ -1379,50 +1384,44 @@ const styles = StyleSheet.create({
   },
   muscleCard: {
     width: '48.5%',
-    backgroundColor: '#1E222B',
-    borderRadius: 12,
-    padding: 14,
-    borderWidth: 1,
-    borderColor: '#2D333F',
+    height: 114,
+    backgroundColor: '#161920',
+    borderRadius: 14,
+    borderWidth: 1.2,
+    borderColor: '#262C38',
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    overflow: 'hidden',
+    position: 'relative',
+  },
+  muscleCardBookmark: {
+    width: '100%',
+    height: 72,
+    alignItems: 'center',
   },
   muscleCardActive: {
-    backgroundColor: '#152417',
+    backgroundColor: '#142017',
     borderColor: '#A3E635',
     borderWidth: 1.5,
   },
   bookmarkCard: {
-    borderColor: '#2D333F',
+    borderColor: '#262C38',
   },
-  muscleCardHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 8,
+  muscleCardTextContainer: {
+    flex: 1,
+    paddingLeft: 14,
+    paddingTop: 14,
+    paddingRight: 56,
+    justifyContent: 'flex-start',
+    zIndex: 2,
   },
-  muscleIconBox: {
-    width: 34,
-    height: 34,
-    borderRadius: 8,
-    backgroundColor: '#262C37',
+  bookmarkCardTextContainer: {
+    paddingTop: 0,
     justifyContent: 'center',
-    alignItems: 'center',
-  },
-  muscleIconBoxActive: {
-    backgroundColor: 'rgba(163, 230, 53, 0.2)',
-  },
-  bookmarkIconBox: {
-    backgroundColor: 'rgba(163, 230, 53, 0.15)',
-  },
-  muscleCheckBadge: {
-    width: 22,
-    height: 22,
-    borderRadius: 11,
-    backgroundColor: '#A3E635',
-    justifyContent: 'center',
-    alignItems: 'center',
+    paddingRight: 70,
   },
   muscleCardName: {
-    fontSize: 15,
+    fontSize: 16,
     fontWeight: '700',
     color: '#FFFFFF',
     marginBottom: 2,
@@ -1431,11 +1430,32 @@ const styles = StyleSheet.create({
     color: '#A3E635',
   },
   bookmarkCardName: {
-    color: '#A3E635',
+    color: '#FFFFFF',
   },
   muscleCardSub: {
     fontSize: 11,
     color: '#94A3B8',
+    lineHeight: 14,
+  },
+  muscleCardSubActive: {
+    color: '#CBD5E1',
+  },
+  muscleCardImageWrapper: {
+    position: 'absolute',
+    right: -6,
+    top: 0,
+    bottom: 0,
+    width: 104,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  bookmarkCardImageWrapper: {
+    width: 64,
+    right: 10,
+  },
+  muscleCardImage: {
+    width: '100%',
+    height: '100%',
   },
   /* Sub-muscles */
   subMuscleChipsWrap: {

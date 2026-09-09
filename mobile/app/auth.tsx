@@ -27,8 +27,8 @@ import {
   handleAuthUrl,
   sendPasswordResetEmail,
   updatePassword,
-  verifyRecoveryOtp,
   isRecoveryUrl,
+  isValidEmail,
 } from '../src/services/auth';
 
 function GoogleIcon({ size = 20 }: { size?: number }) {
@@ -65,7 +65,6 @@ export default function AuthScreen() {
   // Password reset states
   const [resetEmail, setResetEmail] = useState('');
   const [resetSent, setResetSent] = useState(false);
-  const [otpCode, setOtpCode] = useState('');
   const [newPassword, setNewPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
 
@@ -84,17 +83,17 @@ export default function AuthScreen() {
     const res = await handleAuthUrl(url);
     if (res.success) {
       if (res.isRecovery) {
-        setMode('UPDATE_PASSWORD');
+        router.replace('/reset-password');
       } else {
         router.replace('/(tabs)/user');
       }
     } else if (res.errorCode === 'otp_expired') {
       Alert.alert(
         'Länken har gått ut',
-        'Länken i mailet förbrukades av webbläsaren eller har gått ut. Ange den 6-siffriga koden från mailet direkt här i appen istället.'
+        'Länken i mailet har gått ut eller redan förbrukats. Vänligen begär en ny återställningslänk.'
       );
       setMode('FORGOT_PASSWORD');
-      setResetSent(true);
+      setResetSent(false);
     }
   };
 
@@ -111,7 +110,7 @@ export default function AuthScreen() {
     // Supabase auth state listener for password recovery
     const { data: authListener } = supabase.auth.onAuthStateChange((event) => {
       if (event === 'PASSWORD_RECOVERY') {
-        setMode('UPDATE_PASSWORD');
+        router.replace('/reset-password');
       }
     });
 
@@ -154,14 +153,20 @@ export default function AuthScreen() {
   }
 
   async function signInWithEmail() {
-    if (!email.trim() || !password) {
+    const cleanEmail = email.trim();
+    if (!cleanEmail || !password) {
       Alert.alert('Fyll i uppgifter', 'Vänligen ange både e-post och lösenord.');
+      return;
+    }
+
+    if (!isValidEmail(cleanEmail)) {
+      Alert.alert('Ogiltig e-post', 'Vänligen ange en giltig e-postadress (t.ex. namn@domän.se).');
       return;
     }
 
     setLoading(true);
     const { error } = await supabase.auth.signInWithPassword({
-      email: email.trim(),
+      email: cleanEmail,
       password: password,
     });
 
@@ -174,8 +179,14 @@ export default function AuthScreen() {
   }
 
   async function signUpWithEmail() {
-    if (!email.trim() || !password) {
+    const cleanEmail = email.trim();
+    if (!cleanEmail || !password) {
       Alert.alert('Fyll i uppgifter', 'Vänligen ange både e-post och lösenord.');
+      return;
+    }
+
+    if (!isValidEmail(cleanEmail)) {
+      Alert.alert('Ogiltig e-post', 'Vänligen ange en giltig e-postadress (t.ex. namn@domän.se).');
       return;
     }
 
@@ -184,7 +195,7 @@ export default function AuthScreen() {
       data: { session },
       error,
     } = await supabase.auth.signUp({
-      email: email.trim(),
+      email: cleanEmail,
       password: password,
     });
 
@@ -205,6 +216,11 @@ export default function AuthScreen() {
       return;
     }
 
+    if (!isValidEmail(targetEmail)) {
+      Alert.alert('Ogiltig e-post', 'Vänligen ange en giltig e-postadress (t.ex. namn@domän.se).');
+      return;
+    }
+
     setLoading(true);
     const result = await sendPasswordResetEmail(targetEmail);
     setLoading(false);
@@ -213,53 +229,6 @@ export default function AuthScreen() {
       setResetSent(true);
     } else {
       Alert.alert('Fel vid återställning', result.error || 'Kunde inte skicka återställningslänk.');
-    }
-  }
-
-  async function handleResetWithOtpAndNewPassword() {
-    const targetEmail = resetEmail.trim() || email.trim();
-    if (!targetEmail) {
-      Alert.alert('Ange e-post', 'Vänligen ange din e-postadress.');
-      return;
-    }
-
-    if (!otpCode.trim()) {
-      Alert.alert('Ange kod', 'Vänligen ange den 6-siffriga koden från ditt mail.');
-      return;
-    }
-
-    if (!newPassword || newPassword.length < 6) {
-      Alert.alert('Ogiltigt lösenord', 'Lösenordet måste vara minst 6 tecken långt.');
-      return;
-    }
-
-    if (newPassword !== confirmPassword) {
-      Alert.alert('Lösenorden matchar inte', 'Kontrollera att båda lösenordsfälten är identiska.');
-      return;
-    }
-
-    setLoading(true);
-    // 1. Verify 6-digit OTP code to establish authenticated recovery session
-    const otpResult = await verifyRecoveryOtp(targetEmail, otpCode);
-    if (!otpResult.success) {
-      setLoading(false);
-      Alert.alert('Ogiltig kod', otpResult.error || 'Koden är ogiltig eller har gått ut. Kontrollera mailet och försök igen.');
-      return;
-    }
-
-    // 2. Set new password
-    const updateResult = await updatePassword(newPassword);
-    setLoading(false);
-
-    if (updateResult.success) {
-      Alert.alert('Klart!', 'Ditt lösenord har uppdaterats. Du loggas nu in.', [
-        {
-          text: 'Fortsätt',
-          onPress: () => router.replace('/(tabs)/user'),
-        },
-      ]);
-    } else {
-      Alert.alert('Fel', updateResult.error || 'Kunde inte uppdatera lösenordet.');
     }
   }
 
@@ -309,7 +278,6 @@ export default function AuthScreen() {
               style={styles.backButton}
               onPress={() => {
                 setResetSent(false);
-                setOtpCode('');
                 setNewPassword('');
                 setConfirmPassword('');
                 setMode('LOGIN');
@@ -357,11 +325,11 @@ export default function AuthScreen() {
                 <TouchableOpacity
                   style={styles.googleButton}
                   onPress={handleGoogleSignIn}
-                  disabled={isAnyLoading}
+                  disabled={loadingGoogle}
                   activeOpacity={0.85}
                 >
                   {loadingGoogle ? (
-                    <ActivityIndicator color="#0A0A0A" />
+                    <ActivityIndicator color="#1F2937" />
                   ) : (
                     <>
                       <GoogleIcon size={20} />
@@ -409,12 +377,10 @@ export default function AuthScreen() {
               <TouchableOpacity
                 style={styles.forgotPasswordButton}
                 onPress={() => {
-                  setResetEmail(email);
                   setResetSent(false);
                   setMode('FORGOT_PASSWORD');
                 }}
                 disabled={isAnyLoading}
-                activeOpacity={0.7}
               >
                 <Text style={styles.forgotPasswordText}>Glömt lösenord?</Text>
               </TouchableOpacity>
@@ -473,76 +439,37 @@ export default function AuthScreen() {
               {resetSent ? (
                 <View style={styles.formContainer}>
                   <View style={styles.successIconWrapper}>
-                    <ShieldCheck size={44} color="#A3E635" />
+                    <Mail size={44} color="#A3E635" />
                   </View>
                   <Text style={styles.modeTitle}>Kolla din inkorg</Text>
                   <Text style={styles.modeSubtitle}>
-                    Vi har skickat ett mail till{' '}
-                    <Text style={styles.highlightText}>{resetEmail || email}</Text>. Fyll i den 6-siffriga koden och ditt nya lösenord nedan.
+                    Vi har skickat en återställningslänk till{' '}
+                    <Text style={styles.highlightText}>{resetEmail || email}</Text>. Klicka på länken i mailet för att välja ett nytt lösenord.
                   </Text>
-
-                  {/* OTP Code Input */}
-                  <View style={styles.inputContainer}>
-                    <TextInput
-                      style={[styles.input, styles.otpInput]}
-                      onChangeText={setOtpCode}
-                      value={otpCode}
-                      placeholder="6-siffrig kod (t.ex. 123456)"
-                      placeholderTextColor="#94A3B8"
-                      keyboardType="number-pad"
-                      maxLength={6}
-                      editable={!loading}
-                    />
-                  </View>
-
-                  {/* New Password Inputs */}
-                  <View style={styles.inputContainer}>
-                    <TextInput
-                      style={styles.input}
-                      onChangeText={setNewPassword}
-                      value={newPassword}
-                      secureTextEntry={true}
-                      placeholder="Nytt lösenord (minst 6 tecken)"
-                      placeholderTextColor="#94A3B8"
-                      autoCapitalize="none"
-                      editable={!loading}
-                    />
-                  </View>
-
-                  <View style={styles.inputContainer}>
-                    <TextInput
-                      style={styles.input}
-                      onChangeText={setConfirmPassword}
-                      value={confirmPassword}
-                      secureTextEntry={true}
-                      placeholder="Bekräfta nytt lösenord"
-                      placeholderTextColor="#94A3B8"
-                      autoCapitalize="none"
-                      editable={!loading}
-                    />
-                  </View>
 
                   <View style={styles.buttonContainer}>
                     <TouchableOpacity
                       style={[styles.button, styles.primaryButton]}
                       disabled={loading}
-                      onPress={handleResetWithOtpAndNewPassword}
+                      onPress={handleSendResetEmail}
                       activeOpacity={0.85}
                     >
                       {loading ? (
                         <ActivityIndicator color="#0A0A0A" />
                       ) : (
-                        <Text style={styles.primaryButtonText}>Spara nytt lösenord</Text>
+                        <Text style={styles.primaryButtonText}>Skicka länken igen</Text>
                       )}
                     </TouchableOpacity>
 
                     <TouchableOpacity
                       style={[styles.button, styles.secondaryButton]}
-                      disabled={loading}
-                      onPress={handleSendResetEmail}
+                      onPress={() => {
+                        setResetSent(false);
+                        setMode('LOGIN');
+                      }}
                       activeOpacity={0.85}
                     >
-                      <Text style={styles.secondaryButtonText}>Skicka ny kod</Text>
+                      <Text style={styles.secondaryButtonText}>Tillbaka till inloggning</Text>
                     </TouchableOpacity>
                   </View>
                 </View>
@@ -553,7 +480,7 @@ export default function AuthScreen() {
                   </View>
                   <Text style={styles.modeTitle}>Återställ lösenord</Text>
                   <Text style={styles.modeSubtitle}>
-                    Ange din e-postadress så skickar vi en kod/länk för att återställa ditt lösenord.
+                    Ange din e-postadress så skickar vi en länk för att välja ett nytt lösenord.
                   </Text>
 
                   <View style={styles.inputContainer}>
@@ -579,7 +506,7 @@ export default function AuthScreen() {
                       {loading ? (
                         <ActivityIndicator color="#0A0A0A" />
                       ) : (
-                        <Text style={styles.primaryButtonText}>Skicka återställningskod</Text>
+                        <Text style={styles.primaryButtonText}>Skicka återställningslänk</Text>
                       )}
                     </TouchableOpacity>
                   </View>

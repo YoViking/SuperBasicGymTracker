@@ -102,7 +102,7 @@ export default function LegalTermsContent() {
           <Text style={styles.sectionTitle}>5. Radering av konto & Ändringar</Text>
         </View>
         <Text style={styles.paragraph}>
-          Du har full kontroll över dina data. Du kan när som helst begära fullständig radering av ditt konto och all tillhörande träningshistorik.
+          Du har full kontroll över dina data. Du kan när som helst begära fullständig radering av ditt konto och all tillhörande träningshistorik genom att kontakta support@workoutplayer.se.
         </Text>
         <Text style={styles.paragraph}>
           Vi förbehåller oss rätten att uppdatera dessa villkor när ny funktionalitet lanseras. Fortsatt användning av Workout Player efter uppdatering innebär att du godkänner de nya villkoren.

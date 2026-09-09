@@ -39,33 +39,37 @@ export async function handleAuthUrl(url: string): Promise<HandleUrlResult> {
     const hashIndex = url.indexOf('#');
     const queryIndex = url.indexOf('?');
 
+    let queryString = '';
+    let hashString = '';
+
+    if (queryIndex !== -1) {
+      queryString = hashIndex !== -1 && hashIndex > queryIndex
+        ? url.substring(queryIndex + 1, hashIndex)
+        : url.substring(queryIndex + 1);
+    }
     if (hashIndex !== -1) {
-      const hashString = url.substring(hashIndex + 1);
-      const hashParams = new URLSearchParams(hashString);
-      accessToken = hashParams.get('access_token');
-      refreshToken = hashParams.get('refresh_token');
-      code = hashParams.get('code');
-      authType = hashParams.get('type');
-      error = hashParams.get('error') || hashParams.get('error_description');
-      errorCode = hashParams.get('error_code');
+      hashString = queryIndex !== -1 && queryIndex > hashIndex
+        ? url.substring(hashIndex + 1, queryIndex)
+        : url.substring(hashIndex + 1);
     }
 
-    if (!accessToken && !error && queryIndex !== -1) {
-      const queryString = hashIndex !== -1 ? url.substring(queryIndex + 1, hashIndex) : url.substring(queryIndex + 1);
-      const queryParams = new URLSearchParams(queryString);
-      accessToken = queryParams.get('access_token');
-      refreshToken = queryParams.get('refresh_token');
-      if (!code) code = queryParams.get('code');
-      if (!authType) authType = queryParams.get('type');
-      if (!error) error = queryParams.get('error') || queryParams.get('error_description');
-      if (!errorCode) errorCode = queryParams.get('error_code');
-    }
+    const queryParams = new URLSearchParams(queryString);
+    const hashParams = new URLSearchParams(hashString);
+
+    accessToken = hashParams.get('access_token') || queryParams.get('access_token');
+    refreshToken = hashParams.get('refresh_token') || queryParams.get('refresh_token');
+    code = hashParams.get('code') || queryParams.get('code');
+    authType = hashParams.get('type') || queryParams.get('type');
+    error = hashParams.get('error') || hashParams.get('error_description') || queryParams.get('error') || queryParams.get('error_description');
+    errorCode = hashParams.get('error_code') || queryParams.get('error_code');
+
+    const isRecovery = authType === 'recovery' || url.includes('type=recovery') || url.includes('recovery');
 
     if (error || errorCode) {
       console.warn('[Auth] Auth URL contained error:', errorCode, error);
       return {
         success: false,
-        isRecovery: authType === 'recovery' || url.includes('recovery'),
+        isRecovery,
         error: error || 'Länken är ogiltig eller har gått ut',
         errorCode: errorCode || undefined,
       };
@@ -84,7 +88,7 @@ export async function handleAuthUrl(url: string): Promise<HandleUrlResult> {
       console.log('[Auth] Session successfully established from tokens!');
       return {
         success: true,
-        isRecovery: authType === 'recovery' || url.includes('recovery'),
+        isRecovery,
       };
     }
 
@@ -97,7 +101,7 @@ export async function handleAuthUrl(url: string): Promise<HandleUrlResult> {
       console.log('[Auth] Session successfully established from code!');
       return {
         success: true,
-        isRecovery: authType === 'recovery' || url.includes('recovery'),
+        isRecovery,
       };
     }
 
@@ -293,7 +297,16 @@ export async function signInWithApple(): Promise<AuthResult> {
  */
 export function isRecoveryUrl(url: string): boolean {
   if (!url) return false;
-  return url.includes('type=recovery');
+  return url.includes('type=recovery') || url.includes('recovery');
+}
+
+/**
+ * Validates if the given string is a syntactically valid email address.
+ */
+export function isValidEmail(email: string): boolean {
+  if (!email) return false;
+  const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/;
+  return emailRegex.test(email.trim());
 }
 
 /**
@@ -303,8 +316,8 @@ export async function sendPasswordResetEmail(email: string): Promise<AuthResult>
   try {
     const isExpoGo = Constants.executionEnvironment === ExecutionEnvironment.StoreClient;
     const redirectUrl = isExpoGo
-      ? AuthSession.makeRedirectUri({ path: 'auth' })
-      : 'workoutplayer://auth';
+      ? AuthSession.makeRedirectUri({ path: 'auth?type=recovery' })
+      : 'workoutplayer://auth?type=recovery';
 
     console.log('[Auth] Sending password reset for:', email, 'redirectUrl:', redirectUrl);
 

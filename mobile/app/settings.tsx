@@ -1,8 +1,8 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, Switch, Modal, Pressable, Platform, ScrollView } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, Switch, Modal, Pressable, Platform, ScrollView, Linking, Alert } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter, Stack } from 'expo-router';
-import { ArrowLeft, ChevronRight, Check, LogOut, Sparkles } from 'lucide-react-native';
+import { ArrowLeft, ChevronRight, Check, LogOut, Sparkles, Bug, Mail } from 'lucide-react-native';
 import { supabase } from '../src/lib/supabase';
 import OnboardingWizard from '../src/components/onboarding/OnboardingWizard';
 import {
@@ -61,6 +61,53 @@ export default function SettingsScreen() {
   const handleSignOut = async () => {
     await supabase.auth.signOut();
     router.replace('/');
+  };
+
+  const handleReportBug = async () => {
+    const subject = encodeURIComponent('Felrapport - Workout Player');
+    const body = encodeURIComponent(
+      `Beskriv felet så detaljerat som möjligt:\n\n\n---\nTeknisk information:\nAppversion: 1.0.0\nPlattform: ${Platform.OS} (${Platform.Version})\nKonto: ${userEmail || 'Ej inloggad'}`
+    );
+    const mailtoUrl = `mailto:support@workoutplayer.se?subject=${subject}&body=${body}`;
+
+    try {
+      const supported = await Linking.canOpenURL(mailtoUrl);
+      if (supported) {
+        await Linking.openURL(mailtoUrl);
+      } else {
+        Alert.alert(
+          'Rapportera fel / bugg',
+          'Du kan maila din felrapport direkt till:\n\nsupport@workoutplayer.se\n\nBeskriv gärna vad du gjorde när felet uppstod så hjälper vi dig!'
+        );
+      }
+    } catch {
+      Alert.alert(
+        'Rapportera fel / bugg',
+        'Du kan maila din felrapport direkt till:\n\nsupport@workoutplayer.se'
+      );
+    }
+  };
+
+  const handleContactSupport = async () => {
+    const subject = encodeURIComponent('Fråga / Feedback - Workout Player');
+    const mailtoUrl = `mailto:support@workoutplayer.se?subject=${subject}`;
+
+    try {
+      const supported = await Linking.canOpenURL(mailtoUrl);
+      if (supported) {
+        await Linking.openURL(mailtoUrl);
+      } else {
+        Alert.alert(
+          'Kontakta support',
+          'Du når oss på:\n\nsupport@workoutplayer.se'
+        );
+      }
+    } catch {
+      Alert.alert(
+        'Kontakta support',
+        'Du når oss på:\n\nsupport@workoutplayer.se'
+      );
+    }
   };
 
   return (
@@ -168,7 +215,50 @@ export default function SettingsScreen() {
           </View>
         ) : null}
 
-          {/* Om & Juridiskt Section */}
+        {/* Support & Feedback Section */}
+        <View style={[styles.section, { marginTop: 32 }]}>
+          <Text style={styles.sectionTitle}>Support & Feedback</Text>
+
+          <TouchableOpacity
+            style={styles.settingCard}
+            onPress={handleReportBug}
+            activeOpacity={0.7}
+          >
+            <View style={styles.iconSettingContainer}>
+              <View style={[styles.settingIconWrapper, { backgroundColor: 'rgba(239, 68, 68, 0.15)' }]}>
+                <Bug size={20} color="#EF4444" />
+              </View>
+              <View style={styles.settingTextContainer}>
+                <Text style={styles.settingTitle}>Rapportera fel eller bugg</Text>
+                <Text style={styles.settingSubtitle}>
+                  support@workoutplayer.se
+                </Text>
+              </View>
+            </View>
+            <ChevronRight size={20} color="#94A3B8" />
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            style={[styles.settingCard, { marginTop: 12 }]}
+            onPress={handleContactSupport}
+            activeOpacity={0.7}
+          >
+            <View style={styles.iconSettingContainer}>
+              <View style={[styles.settingIconWrapper, { backgroundColor: 'rgba(163, 230, 53, 0.15)' }]}>
+                <Mail size={20} color="#A3E635" />
+              </View>
+              <View style={styles.settingTextContainer}>
+                <Text style={styles.settingTitle}>Kontakta support</Text>
+                <Text style={styles.settingSubtitle}>
+                  Frågor, feedback och förslag
+                </Text>
+              </View>
+            </View>
+            <ChevronRight size={20} color="#94A3B8" />
+          </TouchableOpacity>
+        </View>
+
+        {/* Om & Juridiskt Section */}
         <View style={[styles.section, { marginTop: 32 }]}>
           <Text style={styles.sectionTitle}>Om & Juridiskt</Text>
 
@@ -317,6 +407,19 @@ const styles = StyleSheet.create({
   settingTextContainer: {
     flex: 1,
     paddingRight: 12,
+  },
+  iconSettingContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flex: 1,
+    gap: 14,
+  },
+  settingIconWrapper: {
+    width: 38,
+    height: 38,
+    borderRadius: 10,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   settingTitle: {
     fontSize: 16,
