@@ -39,6 +39,7 @@ import AiWorkoutWizard from './AiWorkoutWizard';
 import CreationChoiceModal from './CreationChoiceModal';
 
 import { getMuscleGroupImage, getDefaultWorkoutImage, isAiFolder, isAiWorkout } from '../utils/images';
+import { getWorkoutExerciseCount, formatExerciseCount } from '../utils/workout';
 import { cacheService } from '../services/cacheService';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
@@ -166,9 +167,11 @@ export default function SavedWorkouts() {
         .select(`
           *,
           workout_exercises (
+            exercise_id,
             order_index,
             created_at,
             exercise:exercise_library (
+              id,
               gifUrl,
               muscle_group
             )
@@ -493,7 +496,7 @@ export default function SavedWorkouts() {
 
   const renderWorkoutItem = (item: Workout) => {
     const formattedDate = new Date(item.created_at).toISOString().split('T')[0];
-    const exerciseCount = item.workout_exercises?.length || 0;
+    const exerciseCount = getWorkoutExerciseCount(item);
     const parentFolderName = item.folder_id ? folderMap.get(item.folder_id) : null;
 
     return (
@@ -528,7 +531,7 @@ export default function SavedWorkouts() {
               </View>
             )}
             <Text style={styles.workoutDate}>
-              {exerciseCount > 0 ? `${exerciseCount} övningar • ` : ''}
+              {exerciseCount > 0 ? `${formatExerciseCount(exerciseCount)} • ` : ''}
               {formattedDate}
             </Text>
           </View>
@@ -780,7 +783,7 @@ export default function SavedWorkouts() {
                 {/* Workouts Grid */}
                 {displayedWorkouts.map((workout) => {
                   const isAi = isAiWorkout(workout, folders);
-                  const exerciseCount = workout.workout_exercises?.length || 0;
+                  const exerciseCount = getWorkoutExerciseCount(workout);
                   const parentFolderName = workout.folder_id ? folderMap.get(workout.folder_id) : null;
                   const formattedDate = new Date(workout.created_at).toISOString().split('T')[0];
 
@@ -816,7 +819,7 @@ export default function SavedWorkouts() {
                       <View style={styles.gridCardTopRow}>
                         <View style={styles.passCountBadge}>
                           <Text style={styles.passCountText}>
-                            {exerciseCount} {exerciseCount === 1 ? 'övning' : 'övningar'}
+                            {formatExerciseCount(exerciseCount)}
                           </Text>
                         </View>
 

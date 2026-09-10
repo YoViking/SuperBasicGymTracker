@@ -113,9 +113,11 @@ export function useHomeData() {
             .select(`
               *,
               workout_exercises (
+                exercise_id,
                 order_index,
                 created_at,
                 exercise:exercise_library (
+                  id,
                   gifUrl,
                   muscle_group
                 )
@@ -143,9 +145,11 @@ export function useHomeData() {
             .select(`
               *,
               workout_exercises (
+                exercise_id,
                 order_index,
                 created_at,
                 exercise:exercise_library (
+                  id,
                   gifUrl,
                   muscle_group
                 )

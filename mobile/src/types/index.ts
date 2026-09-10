@@ -10,9 +10,11 @@ export interface Workout {
   is_ai?: boolean;
   image_url?: string;
   workout_exercises?: Array<{
+    exercise_id?: string;
     order_index?: number;
     created_at?: string;
     exercise?: {
+      id?: string;
       gifUrl?: string;
       muscle_group?: string;
     } | null;
