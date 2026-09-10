@@ -76,7 +76,7 @@ export default function YearlyStats() {
               showText={false}
               radius={80}
               innerRadius={40}
-              innerCircleColor="#0A0A0A"
+              innerCircleColor="#161920"
               focusOnPress
             />
             {/* Custom Legend */}
@@ -114,8 +114,10 @@ const styles = StyleSheet.create({
     minHeight: 200,
   },
   chartCard: {
-    backgroundColor: '#2D3039',
-    borderRadius: 8,
+    backgroundColor: '#161920',
+    borderRadius: 16,
+    borderWidth: 1.5,
+    borderColor: '#27272A',
     padding: 16,
     marginBottom: 32,
     alignItems: 'center',
@@ -147,8 +149,10 @@ const styles = StyleSheet.create({
   pieChartSection: {
     alignItems: 'center',
     paddingBottom: 40,
-    backgroundColor: '#2D3039',
-    borderRadius: 8,
+    backgroundColor: '#161920',
+    borderRadius: 16,
+    borderWidth: 1.5,
+    borderColor: '#27272A',
     padding: 16,
   },
   pieChartTitle: {

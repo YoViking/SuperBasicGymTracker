@@ -60,16 +60,16 @@ export default function UserScreen() {
     <SafeAreaView style={styles.safeArea} edges={['top']}>
       {/* Header */}
       <View style={styles.header}>
-        <TouchableOpacity 
-          style={styles.avatarCircle} 
+        <TouchableOpacity
+          style={styles.avatarCircle}
           onPress={() => setIsSettingsModalVisible(true)}
           activeOpacity={0.8}
         >
           <Text style={styles.avatarText}>{initial}</Text>
         </TouchableOpacity>
 
-        <TouchableOpacity 
-          style={styles.settingsButton} 
+        <TouchableOpacity
+          style={styles.settingsButton}
           onPress={() => router.push('/settings')}
           activeOpacity={0.8}
         >
@@ -122,9 +122,9 @@ export default function UserScreen() {
           </View>
 
           {/* Swipeable Content Area */}
-          <ScrollView 
-            horizontal 
-            pagingEnabled 
+          <ScrollView
+            horizontal
+            pagingEnabled
             showsHorizontalScrollIndicator={false}
             contentOffset={{ x: activeStatsTab * width, y: 0 }}
             onMomentumScrollEnd={(e) => {
@@ -161,8 +161,8 @@ export default function UserScreen() {
       {mainTab === 'du' && (
         <ScrollView style={styles.tabContentContainer} contentContainerStyle={styles.scrollContent}>
           {/* Body Weight Card */}
-          <TouchableOpacity 
-            style={styles.weightCard} 
+          <TouchableOpacity
+            style={styles.weightCard}
             onPress={() => router.push('/body-weight')}
             activeOpacity={0.8}
           >
@@ -192,15 +192,15 @@ export default function UserScreen() {
         onRequestClose={() => setIsSettingsModalVisible(false)}
       >
         <View style={styles.modalOverlay}>
-          <TouchableOpacity 
-            style={styles.modalBackdrop} 
-            activeOpacity={1} 
-            onPress={() => setIsSettingsModalVisible(false)} 
+          <TouchableOpacity
+            style={styles.modalBackdrop}
+            activeOpacity={1}
+            onPress={() => setIsSettingsModalVisible(false)}
           />
           <View style={styles.settingsModal}>
             <View style={styles.settingsModalHeader}>
               <Text style={styles.settingsModalTitle}>Inställningar</Text>
-              <TouchableOpacity 
+              <TouchableOpacity
                 onPress={() => setIsSettingsModalVisible(false)}
                 hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
               >
@@ -218,8 +218,8 @@ export default function UserScreen() {
               </View>
             </View>
 
-            <TouchableOpacity 
-              style={styles.signOutModalButton} 
+            <TouchableOpacity
+              style={styles.signOutModalButton}
               onPress={handleSignOut}
               activeOpacity={0.8}
             >
@@ -300,13 +300,13 @@ const styles = StyleSheet.create({
   weightCard: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#18181B',
+    backgroundColor: '#161920',
     marginHorizontal: 16,
     marginTop: 4,
     marginBottom: 16,
     padding: 16,
     borderRadius: 16,
-    borderWidth: 1,
+    borderWidth: 1.5,
     borderColor: '#27272A',
   },
   weightIconWrapper: {

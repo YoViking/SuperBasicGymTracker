@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { View, Text, StyleSheet, FlatList, ActivityIndicator, TouchableOpacity, Platform, ToastAndroid } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
+import { LinearGradient } from 'expo-linear-gradient';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import { ArrowLeft, MoreVertical, Pencil, Dumbbell } from 'lucide-react-native';
 import { supabase } from '../../src/lib/supabase';
@@ -23,6 +24,8 @@ export default function FolderScreen() {
   const [workouts, setWorkouts] = useState<Workout[]>([]);
   const [folders, setFolders] = useState<Folder[]>([]);
   const [loading, setLoading] = useState(true);
+  const insets = useSafeAreaInsets();
+  const [isScrolled, setIsScrolled] = useState(false);
   
   const [menuVisible, setMenuVisible] = useState(false);
   const [moveModalVisible, setMoveModalVisible] = useState(false);
@@ -365,45 +368,62 @@ export default function FolderScreen() {
   const renderHeader = () => {
     if (!currentFolder) return null;
     return (
-      <View style={styles.programHeaderContainer}>
-        <View style={styles.imageWrapper}>
-          <TouchableOpacity activeOpacity={0.8} onPress={() => setEditModalVisible(true)} style={styles.programImageCard}>
-            {currentFolder.image_url && currentFolder.image_url !== 'ai-default' ? (
-              <Image source={{ uri: currentFolder.image_url }} style={styles.programImage} contentFit="cover" />
-            ) : (
-              <Image
-                source={getDefaultWorkoutImage(isAiFolder(currentFolder))}
-                style={styles.programImage}
-                contentFit="cover"
-              />
-            )}
-            <View style={styles.imageOverlay}>
-              <Text style={styles.imageTitle}>{currentFolder.name.toUpperCase()}</Text>
-            </View>
+      <View style={styles.programTopSection}>
+        <View style={styles.topOverscrollFiller} pointerEvents="none" />
+        <LinearGradient
+          colors={['#2A303A', '#1E232B', '#13161A', '#0A0A0A']}
+          locations={[0, 0.45, 0.8, 1]}
+          start={{ x: 0.5, y: 0 }}
+          end={{ x: 0.5, y: 1 }}
+          style={styles.headerGradient}
+          pointerEvents="none"
+        />
+
+        {/* Top Header Row with back arrow and program title */}
+        <View style={[styles.header, { paddingTop: (insets.top || 0) + 8 }]}>
+          <TouchableOpacity style={styles.backButton} onPress={() => router.back()}>
+            <ArrowLeft size={24} color="#F8FAFC" />
           </TouchableOpacity>
-          <TouchableOpacity style={styles.editIconWrapper} onPress={() => setEditModalVisible(true)}>
-            <Pencil size={14} color="#F8FAFC" />
-          </TouchableOpacity>
+          <Text style={styles.headerTitle} numberOfLines={2}>
+            {currentFolder?.name || folderName || 'Program'}
+          </Text>
         </View>
-        {currentFolder.description ? (
-          <Text style={styles.programDescription}>{currentFolder.description}</Text>
-        ) : null}
+
+        <View style={styles.programHeaderContainer}>
+          <View style={styles.imageWrapper}>
+            <TouchableOpacity activeOpacity={0.8} onPress={() => setEditModalVisible(true)} style={styles.programImageCard}>
+              {currentFolder.image_url && currentFolder.image_url !== 'ai-default' ? (
+                <Image source={{ uri: currentFolder.image_url }} style={styles.programImage} contentFit="cover" />
+              ) : (
+                <Image
+                  source={getDefaultWorkoutImage(isAiFolder(currentFolder))}
+                  style={styles.programImage}
+                  contentFit="cover"
+                />
+              )}
+              <View style={styles.imageOverlay}>
+                <Text style={styles.imageTitle}>{currentFolder.name.toUpperCase()}</Text>
+              </View>
+            </TouchableOpacity>
+            <TouchableOpacity style={styles.editIconWrapper} onPress={() => setEditModalVisible(true)}>
+              <Pencil size={14} color="#F8FAFC" />
+            </TouchableOpacity>
+          </View>
+          {currentFolder.description ? (
+            <Text style={styles.programDescription}>{currentFolder.description}</Text>
+          ) : null}
+        </View>
       </View>
     );
   };
 
   return (
-    <SafeAreaView style={styles.safeArea}>
-      <View style={styles.header}>
-        <TouchableOpacity style={styles.backButton} onPress={() => router.back()}>
-          <ArrowLeft size={24} color="#F8FAFC" />
-        </TouchableOpacity>
-        <Text style={styles.headerTitle}>{currentFolder?.name || folderName || 'Program'}</Text>
-      </View>
-
+    <SafeAreaView style={styles.safeArea} edges={['left', 'right']}>
       <View style={styles.content}>
         {loading ? (
-          <ActivityIndicator size="large" color="#A3E635" style={{ marginTop: 40 }} />
+          <View style={styles.loadingContainer}>
+            <ActivityIndicator size="large" color="#A3E635" />
+          </View>
         ) : (
           <FlatList
             data={workouts}
@@ -411,12 +431,25 @@ export default function FolderScreen() {
             renderItem={renderWorkoutItem}
             ListHeaderComponent={renderHeader}
             contentContainerStyle={styles.listContent}
+            onScroll={(e) => {
+              const offsetY = e.nativeEvent.contentOffset.y;
+              if (offsetY > 40 && !isScrolled) {
+                setIsScrolled(true);
+              } else if (offsetY <= 40 && isScrolled) {
+                setIsScrolled(false);
+              }
+            }}
+            scrollEventThrottle={16}
             ListEmptyComponent={
               <Text style={styles.emptyText}>Programmet är tomt.</Text>
             }
           />
         )}
       </View>
+
+      {isScrolled && insets.top > 0 && (
+        <View style={[styles.statusBarScrolledCover, { height: insets.top }]} pointerEvents="none" />
+      )}
 
       <WorkoutMenuModal
         visible={menuVisible}
@@ -466,11 +499,45 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: '#0A0A0A',
   },
+  programTopSection: {
+    width: '100%',
+    position: 'relative',
+    paddingBottom: 16,
+  },
+  headerGradient: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+  },
+  topOverscrollFiller: {
+    position: 'absolute',
+    top: -600,
+    left: 0,
+    right: 0,
+    height: 600,
+    backgroundColor: '#2A303A',
+  },
+  statusBarScrolledCover: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    backgroundColor: '#0A0A0A',
+    zIndex: 10,
+  },
+  loadingContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginTop: 60,
+  },
   header: {
     flexDirection: 'row',
     alignItems: 'center',
     paddingHorizontal: 16,
-    paddingVertical: 16,
+    paddingBottom: 8,
   },
   backButton: {
     padding: 8,
@@ -480,21 +547,25 @@ const styles = StyleSheet.create({
     fontSize: 20,
     fontWeight: '700',
     color: '#F8FAFC',
+    flex: 1,
   },
   content: {
     flex: 1,
-    paddingHorizontal: 20,
-    paddingTop: 16,
   },
   listContent: {
     paddingBottom: 40,
   },
   workoutCard: {
-    backgroundColor: 'transparent',
-    paddingVertical: 12,
-    marginBottom: 16,
+    backgroundColor: '#0A0A0A',
+    borderRadius: 16,
+    borderWidth: 1.5,
+    borderColor: '#27272A',
+    marginHorizontal: 16,
+    marginBottom: 12,
+    padding: 12,
     flexDirection: 'row',
     alignItems: 'center',
+    overflow: 'hidden',
   },
   collageGrid: {
     width: 48,
@@ -525,14 +596,14 @@ const styles = StyleSheet.create({
   defaultThumbnail: {
     width: 48,
     height: 48,
-    borderRadius: 6,
+    borderRadius: 10,
     backgroundColor: '#18181B',
     borderWidth: 1,
     borderColor: '#27272A',
   },
   workoutInfo: {
     flex: 1,
-    marginLeft: 16,
+    marginLeft: 12,
   },
   workoutTitle: {
     fontSize: 16,

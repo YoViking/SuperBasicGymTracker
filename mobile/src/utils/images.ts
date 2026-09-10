@@ -40,9 +40,26 @@ export const MUSCLE_CARD_IMAGES: Record<string, { active: any; inactive: any }> 
   },
 };
 
-export const getMuscleCardImage = (id: string, isActive: boolean = false) => {
-  const item = MUSCLE_CARD_IMAGES[id];
-  if (!item) return MUSCLE_CARD_IMAGES.Chest.inactive;
+export const getMuscleCardImage = (id?: string, isActive: boolean = false) => {
+  if (!id) return isActive ? MUSCLE_CARD_IMAGES.Chest.active : MUSCLE_CARD_IMAGES.Chest.inactive;
+
+  if (MUSCLE_CARD_IMAGES[id]) {
+    return isActive ? MUSCLE_CARD_IMAGES[id].active : MUSCLE_CARD_IMAGES[id].inactive;
+  }
+
+  const clean = id.toLowerCase().trim();
+  let key = 'Chest';
+  if (clean.includes('chest') || clean.includes('bröst') || clean.includes('pectoral')) key = 'Chest';
+  else if (clean.includes('back') || clean.includes('rygg') || clean.includes('lat') || clean.includes('trap')) key = 'Back';
+  else if (clean.includes('leg') || clean.includes('ben') || clean.includes('quad') || clean.includes('calf') || clean.includes('vader') || clean.includes('lår') || clean.includes('hamstring')) key = 'Legs';
+  else if (clean.includes('arm') || clean.includes('bicep') || clean.includes('tricep') || clean.includes('underarm')) key = 'Arms';
+  else if (clean.includes('shoulder') || clean.includes('axel') || clean.includes('axlar') || clean.includes('deltoid')) key = 'Shoulders';
+  else if (clean.includes('core') || clean.includes('ab') || clean.includes('mage')) key = 'Core';
+  else if (clean.includes('glute') || clean.includes('rump') || clean.includes('säte')) key = 'Glutes';
+  else if (clean.includes('bookmark') || clean.includes('favorit') || clean.includes('bokmärk')) key = 'Bookmarked';
+  else if (clean.includes('other') || clean.includes('övrigt') || clean.includes('neck') || clean.includes('nack')) key = 'Other';
+
+  const item = MUSCLE_CARD_IMAGES[key] || MUSCLE_CARD_IMAGES.Chest;
   return isActive ? item.active : item.inactive;
 };
 

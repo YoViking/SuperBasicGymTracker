@@ -109,10 +109,10 @@ export default function UserProfileCard({ onProfileUpdated }: UserProfileCardPro
 
 const styles = StyleSheet.create({
   card: {
-    backgroundColor: '#18181B',
+    backgroundColor: '#161920',
     borderRadius: 16,
     padding: 16,
-    borderWidth: 1,
+    borderWidth: 1.5,
     borderColor: '#27272A',
     marginBottom: 16,
     marginHorizontal: 16,

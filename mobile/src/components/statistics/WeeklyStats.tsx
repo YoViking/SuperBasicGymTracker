@@ -232,8 +232,10 @@ const styles = StyleSheet.create({
     minHeight: 200,
   },
   topCard: {
-    backgroundColor: '#2D3039',
-    borderRadius: 8,
+    backgroundColor: '#161920',
+    borderRadius: 16,
+    borderWidth: 1.5,
+    borderColor: '#27272A',
     paddingTop: 16,
     paddingBottom: 24,
     marginBottom: 24,
