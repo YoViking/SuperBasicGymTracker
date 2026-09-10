@@ -12,6 +12,7 @@ import CreateFolderModal from '../../src/components/CreateFolderModal';
 import EditFolderModal from '../../src/components/EditFolderModal';
 import { Image } from 'expo-image';
 import { getMuscleGroupImage, getDefaultWorkoutImage, isAiFolder, isAiWorkout } from '../../src/utils/images';
+import { getWorkoutExerciseCount, formatExerciseCount } from '../../src/utils/workout';
 import { decode } from 'base64-arraybuffer';
 import { cacheService } from '../../src/services/cacheService';
 
@@ -65,9 +66,11 @@ export default function FolderScreen() {
         .select(`
           *,
           workout_exercises (
+            exercise_id,
             order_index,
             created_at,
             exercise:exercise_library (
+              id,
               gifUrl,
               muscle_group
             )
@@ -337,6 +340,7 @@ export default function FolderScreen() {
 
   const renderWorkoutItem = ({ item }: { item: Workout }) => {
     const formattedDate = new Date(item.created_at).toISOString().split('T')[0];
+    const exerciseCount = getWorkoutExerciseCount(item);
     const collage = getCollageImages(item);
     
     return (
@@ -356,7 +360,10 @@ export default function FolderScreen() {
         )}
         <View style={styles.workoutInfo}>
           <Text style={styles.workoutTitle}>{item.name}</Text>
-          <Text style={styles.workoutDate}>{formattedDate}</Text>
+          <Text style={styles.workoutDate}>
+            {exerciseCount > 0 ? `${formatExerciseCount(exerciseCount)} • ` : ''}
+            {formattedDate}
+          </Text>
         </View>
         <TouchableOpacity style={styles.menuIconWrapper} onPress={() => handleOpenMenu(item)}>
           <MoreVertical size={20} color="#F8FAFC" />
