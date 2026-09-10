@@ -29,6 +29,7 @@ import {
   checkExistingProgram,
   MatchedProgram,
 } from '../services/ai';
+import { onboardingService } from '../services/onboardingService';
 import { useAuth } from '../context/AuthContext';
 import { useRouter } from 'expo-router';
 import {
@@ -70,6 +71,7 @@ export default function AiProgramWizard({ visible, onClose, onSaved }: AiProgram
 
   // Step 4: Fitness Goal State
   const [fitnessGoal, setFitnessGoal] = useState('Muscle Growth (Hypertrophy)');
+  const [experienceLevel, setExperienceLevel] = useState('intermediate');
 
   // Loading & Generation State
   const [generating, setGenerating] = useState(false);
@@ -79,6 +81,26 @@ export default function AiProgramWizard({ visible, onClose, onSaved }: AiProgram
   // Animation values
   const slideAnim = useRef(new Animated.Value(0)).current;
   const progressAnim = useRef(new Animated.Value(0.25)).current;
+
+  // Pre-load saved user profile preferences
+  useEffect(() => {
+    if (user?.id && visible) {
+      onboardingService.getOnboardingProfile(user.id).then((profile) => {
+        if (profile) {
+          if (profile.location) setLocation(profile.location);
+          if (profile.equipment && profile.equipment.length > 0) {
+            setSelectedEquipment(profile.equipment);
+          }
+          if (profile.daysPerWeek) setDaysPerWeek(profile.daysPerWeek);
+          if (profile.duration) setDuration(profile.duration);
+          if (profile.injuries) setSelectedInjuries(profile.injuries);
+          if (profile.exclusions) setExclusions(profile.exclusions);
+          if (profile.fitnessGoal) setFitnessGoal(profile.fitnessGoal);
+          if (profile.experienceLevel) setExperienceLevel(profile.experienceLevel);
+        }
+      });
+    }
+  }, [user?.id, visible]);
 
   // Handle Progress Bar Animation
   useEffect(() => {
@@ -163,9 +185,13 @@ export default function AiProgramWizard({ visible, onClose, onSaved }: AiProgram
         injuries: selectedInjuries,
         exclusions,
         fitnessGoal,
+        experienceLevel,
       });
 
-      const matched = await mapProgramToLibrary(rawProgram);
+      const matched = await mapProgramToLibrary(rawProgram, {
+        allowedEquipment: selectedEquipment,
+        experienceLevel,
+      });
       setMatchedProgram(matched);
     } catch (e: any) {
       console.error(e);

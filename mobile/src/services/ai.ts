@@ -63,8 +63,9 @@ export async function fetchAIProgram(inputs: {
   injuries: string[];
   exclusions: string;
   fitnessGoal: string;
+  experienceLevel?: string;
 }): Promise<GeneratedProgram> {
-  const { location, equipment, daysPerWeek, duration, splitType, injuries, exclusions, fitnessGoal } = inputs;
+  const { location, equipment, daysPerWeek, duration, splitType, injuries, exclusions, fitnessGoal, experienceLevel } = inputs;
   
   // Read keys. In Expo client, environment variables prefixed with EXPO_PUBLIC_ are exposed.
   const geminiKey = process.env.EXPO_PUBLIC_GEMINI_API_KEY || process.env.GEMINI_API_KEY;
@@ -84,6 +85,18 @@ export async function fetchAIProgram(inputs: {
   try {
     const systemPrompt = `You are an expert strength coach.
 Generate a balanced weekly workout program based on user constraints.
+
+User Experience Level: ${experienceLevel || 'Intermediate'}
+CRITICAL LEVEL & DIFFICULTY GUIDELINES:
+- If level is 'beginner' or 'Nybörjare': Emphasize foundational compound movements and guided machines with high stability. Keep volume conservative (2-3 working sets per exercise), moderate reps (10-12), high safety margins. NEVER prescribe advanced or risky calisthenics like Handstand Push-Ups, Muscle-Ups, or Pistol Squats.
+- If level is 'intermediate' or 'Medelnivå': Balanced progressive overload, 3-4 sets, rep ranges 6-12 based on goal. NEVER prescribe elite/extreme gymnastics feats like Handstand Push-Ups, Planches, or One-Arm Pull-Ups. For bodyweight shoulders, use Pike Push-Ups, Decline Push-Ups, or regular Push-Ups.
+- If level is 'advanced' or 'Erfaren': High training intensity, heavier compound lifts, advanced variations, 3-5 sets.
+
+CRITICAL EQUIPMENT RULES (STRICT):
+Available Equipment: [${equipment.join(', ') || 'bodyweight only'}]
+You MUST ONLY select exercises matching the user's available equipment.
+- If only 'Bodyweight' or 'body only' is selected: EVERY SINGLE EXERCISE must be 100% bodyweight only (Push-Ups, Inverted Rows, Chin-Ups/Pull-Ups, Dips, Squats, Lunges, Planks). NEVER prescribe Dumbbell, Barbell, Cable, Kettlebell, or Machine exercises!
+
 Strictly avoid exercises that strain reported injury areas:
 - If 'Wrists' is flagged: Avoid barbell wrist-heavy exercises, heavy front squats, or traditional bench press where heavy wrist extension occurs. Substitute with safer alternatives like neutral-grip dumbbells or machines.
 - If 'Knees' is flagged: Avoid heavy squats, lunges, leg extensions. Substitute with box squats, leg curls, or glute bridges.
@@ -130,13 +143,15 @@ Return ONLY a structured JSON response matching this exact schema:
 
     const userPrompt = `Generate a workout program with the following constraints:
 - Location: ${location}
+- User Level: ${experienceLevel || 'Intermediate'}
 - Available Equipment: ${equipment.join(', ') || 'bodyweight only'}
 - Frequency: ${daysPerWeek} days per week
 - Target Workout Duration: ${duration}
 - Split Type: ${splitType}
 - Sensitive/Injured Body Parts: ${injuries.join(', ') || 'None'}
 - Specific Exclusions/Notes: ${exclusions || 'None'}
-- Fitness Goal: ${fitnessGoal}`;
+- Fitness Goal: ${fitnessGoal}
+CRITICAL: Obey the equipment list strictly. If only Bodyweight is selected, do NOT prescribe dumbbells, barbells, or other weighted exercises!`;
 
     let content: string | null = null;
 
@@ -259,7 +274,10 @@ Return ONLY a structured JSON response matching this exact schema:
 /**
  * Maps a generated AI program to the database exercise library using fuzzy matching.
  */
-export async function mapProgramToLibrary(program: GeneratedProgram): Promise<MatchedProgram> {
+export async function mapProgramToLibrary(
+  program: GeneratedProgram,
+  options?: { allowedEquipment?: string[]; experienceLevel?: string; }
+): Promise<MatchedProgram> {
   // 1. Fetch entire exercise library to run matches locally
   const { data: libraryData, error: libraryError } = await supabase
     .from('exercise_library')
@@ -283,10 +301,10 @@ export async function mapProgramToLibrary(program: GeneratedProgram): Promise<Ma
     };
   }
 
-  // 2. Perform matches
+  // 2. Perform matches with strict equipment and difficulty guards
   const matchedWorkouts = program.workouts.map(w => {
     const matchedExercises = w.exercises.map(ex => {
-      const match = findBestExerciseMatch(ex.exerciseName, ex.targetMuscle, ex.equipment, library);
+      const match = findBestExerciseMatch(ex.exerciseName, ex.targetMuscle, ex.equipment, library, options);
       return {
         ...ex,
         matchedExerciseId: match ? match.id : null,
@@ -518,8 +536,9 @@ export async function fetchAISingleWorkout(inputs: {
   injuries?: string[];
   exclusions?: string;
   fitnessGoal?: string;
+  experienceLevel?: string;
 }): Promise<GeneratedWorkout> {
-  const { workoutName, focus, duration, equipment, location = 'Gym', injuries = [], exclusions = '', fitnessGoal = 'Muskeltillväxt' } = inputs;
+  const { workoutName, focus, duration, equipment, location = 'Gym', injuries = [], exclusions = '', fitnessGoal = 'Muskeltillväxt', experienceLevel = 'Intermediate' } = inputs;
 
   const geminiKey = process.env.EXPO_PUBLIC_GEMINI_API_KEY || process.env.GEMINI_API_KEY;
   const opencodeKey = process.env.EXPO_PUBLIC_OPENCODE_API_KEY || process.env.OPENCODE_API_KEY;
@@ -543,6 +562,17 @@ export async function fetchAISingleWorkout(inputs: {
   try {
     const systemPrompt = `You are an elite strength & conditioning coach.
 Generate a single, highly effective, balanced workout routine for the user.
+
+User Experience Level: ${experienceLevel || 'Intermediate'}
+CRITICAL LEVEL & DIFFICULTY GUIDELINES:
+- If level is 'beginner' or 'intermediate' ('Nybörjare' or 'Medelnivå'): NEVER prescribe extreme gymnastic feats such as Handstand Push-Ups, Muscle-Ups, Planches, or One-Arm Pull-Ups. Handstand Push-Ups are strictly forbidden for beginners and intermediates! Use Pike Push-Ups, Decline Push-Ups, standard Push-Ups, or Dips instead.
+- If level is 'advanced' or 'Erfaren': You may include advanced variations if appropriate.
+
+CRITICAL EQUIPMENT RULES (STRICT):
+Available Equipment: [${equipment.join(', ') || 'bodyweight only'}]
+You MUST ONLY select exercises matching the user's available equipment.
+- If only 'Bodyweight' or 'body only' is selected: EVERY SINGLE EXERCISE must be 100% bodyweight only (Push-Ups, Inverted Rows, Chin-Ups/Pull-Ups, Dips, Squats, Lunges, Planks). NEVER prescribe Dumbbell, Barbell, Cable, Kettlebell, or Machine exercises!
+
 Strictly avoid exercises that strain reported injury areas:
 - If 'Wrists' is flagged: Avoid barbell wrist-heavy exercises, heavy front squats, or traditional bench press where heavy wrist extension occurs. Substitute with safer alternatives like neutral-grip dumbbells or machines.
 - If 'Knees' is flagged: Avoid heavy squats, lunges, leg extensions. Substitute with box squats, leg curls, or glute bridges.
@@ -553,6 +583,7 @@ Strictly avoid exercises that strain reported injury areas:
 
 Constraints:
 - Location: ${location}
+- User Level: ${experienceLevel || 'Intermediate'}
 - Focus / Muscles: ${focus}
 - Duration: ~${duration} (${targetCount} exercises total)
 - Available Equipment: ${equipment.join(', ') || 'All standard equipment'}
@@ -643,7 +674,10 @@ Return ONLY valid JSON with this exact structure:
 /**
  * Maps a single generated AI workout to the database exercise library.
  */
-export async function mapWorkoutToLibrary(workout: GeneratedWorkout): Promise<MatchedWorkout> {
+export async function mapWorkoutToLibrary(
+  workout: GeneratedWorkout,
+  options?: { allowedEquipment?: string[]; experienceLevel?: string; }
+): Promise<MatchedWorkout> {
   const { data: libraryData, error: libraryError } = await supabase
     .from('exercise_library')
     .select('*')
@@ -656,7 +690,7 @@ export async function mapWorkoutToLibrary(workout: GeneratedWorkout): Promise<Ma
   const library = (libraryData || []) as ExerciseLibrary[];
 
   const matchedExercises = (workout.exercises || []).map(ex => {
-    const match = findBestExerciseMatch(ex.exerciseName, ex.targetMuscle, ex.equipment, library);
+    const match = findBestExerciseMatch(ex.exerciseName, ex.targetMuscle, ex.equipment, library, options);
     return {
       ...ex,
       matchedExerciseId: match ? match.id : null,

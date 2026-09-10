@@ -8,6 +8,7 @@ import WeeklyStats from '../../src/components/statistics/WeeklyStats';
 import MonthlyStats from '../../src/components/statistics/MonthlyStats';
 import YearlyStats from '../../src/components/statistics/YearlyStats';
 import { getUserBodyWeight, DEFAULT_BODY_WEIGHT } from '../../src/utils/volume';
+import UserProfileCard from '../../src/components/UserProfileCard';
 
 const { width } = Dimensions.get('window');
 const STATS_TABS = ['Veckan', 'Månad', 'År'];
@@ -177,6 +178,9 @@ export default function UserScreen() {
               <Text style={styles.weightUnit}>kg</Text>
             </View>
           </TouchableOpacity>
+
+          {/* User Training Profile Card */}
+          <UserProfileCard />
         </ScrollView>
       )}
 
