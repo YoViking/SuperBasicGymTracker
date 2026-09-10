@@ -64,6 +64,27 @@ export const GOAL_OPTIONS = [
   { id: 'Endurance', label: 'Uthållighet', desc: 'Högintensivt och muskeluthållighet' },
 ];
 
+export const EXPERIENCE_LEVELS = [
+  {
+    id: 'beginner',
+    label: 'Nybörjare',
+    desc: 'Ny till styrketräning. Fokus på säker teknik, maskiner och att bygga en stabil vana.',
+    badge: 'Grundläggande',
+  },
+  {
+    id: 'intermediate',
+    label: 'Medelnivå',
+    desc: 'Har tränat regelbundet och behärskar basövningar. Söker progression och struktur.',
+    badge: 'Vanligast',
+  },
+  {
+    id: 'advanced',
+    label: 'Erfaren',
+    desc: 'Flera års erfarenhet. Van vid tung och intensiv träning med fria vikter.',
+    badge: 'Avancerad',
+  },
+];
+
 export const LOADING_MESSAGES = [
   'Analyserar dina val...',
   'Designar ett skräddarsytt upplägg...',

@@ -29,6 +29,7 @@ import {
   saveSingleWorkoutToDatabase,
   MatchedWorkout,
 } from '../services/ai';
+import { onboardingService } from '../services/onboardingService';
 import { useAuth } from '../context/AuthContext';
 import { Folder } from '../types';
 import { useRouter } from 'expo-router';
@@ -78,6 +79,7 @@ export default function AiWorkoutWizard({
 
   // Step 4: Fitness Goal State
   const [fitnessGoal, setFitnessGoal] = useState('Muscle Growth (Hypertrophy)');
+  const [experienceLevel, setExperienceLevel] = useState('intermediate');
 
   // Loading & Generation State
   const [generating, setGenerating] = useState(false);
@@ -87,6 +89,25 @@ export default function AiWorkoutWizard({
   // Animation values
   const slideAnim = useRef(new Animated.Value(0)).current;
   const progressAnim = useRef(new Animated.Value(0.25)).current;
+
+  // Pre-load saved user profile preferences
+  useEffect(() => {
+    if (user?.id && visible) {
+      onboardingService.getOnboardingProfile(user.id).then((profile) => {
+        if (profile) {
+          if (profile.location) setLocation(profile.location);
+          if (profile.equipment && profile.equipment.length > 0) {
+            setSelectedEquipment(profile.equipment);
+          }
+          if (profile.duration) setDuration(profile.duration);
+          if (profile.injuries) setSelectedInjuries(profile.injuries);
+          if (profile.exclusions) setExclusions(profile.exclusions);
+          if (profile.fitnessGoal) setFitnessGoal(profile.fitnessGoal);
+          if (profile.experienceLevel) setExperienceLevel(profile.experienceLevel);
+        }
+      });
+    }
+  }, [user?.id, visible]);
 
   // Handle Progress Bar Animation
   useEffect(() => {
@@ -174,9 +195,13 @@ export default function AiWorkoutWizard({
         injuries: selectedInjuries,
         exclusions,
         fitnessGoal,
+        experienceLevel,
       });
 
-      const matched = await mapWorkoutToLibrary(generated);
+      const matched = await mapWorkoutToLibrary(generated, {
+        allowedEquipment: selectedEquipment,
+        experienceLevel,
+      });
       setMatchedWorkout(matched);
     } catch (e: any) {
       console.error('Error generating AI workout:', e);

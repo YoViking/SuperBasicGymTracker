@@ -55,6 +55,7 @@ export interface ExerciseLibrary {
   gifUrl?: string;
   completions_count?: number;
   equipment?: string;
+  difficulty?: string;
 }
 
 export interface Bookmark {

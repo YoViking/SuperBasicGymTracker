@@ -1,11 +1,14 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
 export interface OnboardingProfile {
-  fitnessGoal: string;
-  location: string;
-  daysPerWeek: number;
+  fitnessGoal?: string;
+  experienceLevel?: string;
+  injuries?: string[];
+  exclusions?: string;
+  location?: string;
+  daysPerWeek?: number;
   duration?: string;
-  equipment: string[];
+  equipment?: string[];
   completedAt?: string;
 }
 
