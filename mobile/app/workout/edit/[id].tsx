@@ -408,8 +408,10 @@ const styles = StyleSheet.create({
     paddingBottom: 40,
   },
   exerciseCard: {
-    backgroundColor: '#27272A',
-    borderRadius: 8,
+    backgroundColor: '#0A0A0A',
+    borderRadius: 16,
+    borderWidth: 1.5,
+    borderColor: '#27272A',
     marginHorizontal: 16,
     marginBottom: 12,
     flexDirection: 'row',

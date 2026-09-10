@@ -1,15 +1,15 @@
-import React, { useState, useEffect, useRef } from 'react';
-import { 
-  View, 
-  Text, 
-  StyleSheet, 
-  TouchableOpacity, 
-  Dimensions, 
-  Platform, 
-  ScrollView, 
-  AppState, 
-  TextInput, 
-  KeyboardAvoidingView, 
+import React, { useState, useEffect, useRef, useMemo } from 'react';
+import {
+  View,
+  Text,
+  StyleSheet,
+  TouchableOpacity,
+  Dimensions,
+  Platform,
+  ScrollView,
+  AppState,
+  TextInput,
+  KeyboardAvoidingView,
   Keyboard,
   Animated,
   PanResponder,
@@ -19,6 +19,7 @@ import {
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { Image } from 'expo-image';
+import { LinearGradient } from 'expo-linear-gradient';
 import { Play, Pause, SkipForward, SkipBack, Timer, MoreHorizontal, Check, X, Dumbbell, ChevronRight, CircleQuestionMark, Pencil, Plus, RotateCcw } from 'lucide-react-native';
 import { Audio } from 'expo-av';
 import * as Notifications from 'expo-notifications';
@@ -39,6 +40,33 @@ Notifications.setNotificationHandler({
 });
 
 const { width, height: SCREEN_HEIGHT } = Dimensions.get('window');
+
+const getMuscleGroupCanvasColors = (muscleGroup?: string): [string, string, string] => {
+  if (!muscleGroup) return ['#262E3B', '#181D26', '#101319'];
+  const mg = muscleGroup.toLowerCase().trim();
+  if (mg.includes('chest') || mg.includes('bröst') || mg.includes('pectoral')) {
+    return ['#3E1B16', '#26120E', '#160B08'];
+  }
+  if (mg.includes('back') || mg.includes('rygg') || mg.includes('lat') || mg.includes('trap')) {
+    return ['#182A45', '#101B2E', '#0B121E'];
+  }
+  if (mg.includes('leg') || mg.includes('ben') || mg.includes('quad') || mg.includes('calf') || mg.includes('vader') || mg.includes('lår') || mg.includes('hamstring')) {
+    return ['#183620', '#102416', '#0B170E'];
+  }
+  if (mg.includes('arm') || mg.includes('bicep') || mg.includes('tricep') || mg.includes('underarm')) {
+    return ['#16303D', '#0F2029', '#0A151B'];
+  }
+  if (mg.includes('shoulder') || mg.includes('axel') || mg.includes('axlar') || mg.includes('deltoid')) {
+    return ['#331C45', '#22132E', '#160C1E'];
+  }
+  if (mg.includes('core') || mg.includes('ab') || mg.includes('mage')) {
+    return ['#3B2B16', '#271D0E', '#1A1309'];
+  }
+  if (mg.includes('glute') || mg.includes('rump') || mg.includes('säte')) {
+    return ['#3B1832', '#271021', '#1A0B16'];
+  }
+  return ['#262D36', '#1A1E24', '#111418'];
+};
 
 const WORKOUT_GUIDE_ITEMS: GuideStepItem[] = [
   {
@@ -154,6 +182,16 @@ export default function WorkoutPlayer({
   const { height: defaultNavHeight } = getBottomNavLayout(insets.bottom);
   const navHeight = bottomNavHeight ?? (hasBottomNav ? defaultNavHeight : 0);
   const exerciseDisplayName = activeExercise?.sets?.[0]?.custom_name || activeExercise?.exerciseName || '';
+
+  const exerciseImageSource = useMemo(() => {
+    return activeExercise?.gifUrl
+      ? { uri: activeExercise.gifUrl }
+      : getMuscleGroupImage(activeExercise?.muscleGroup);
+  }, [activeExercise?.gifUrl, activeExercise?.muscleGroup]);
+
+  const muscleCanvasColors = useMemo(() => {
+    return getMuscleGroupCanvasColors(activeExercise?.muscleGroup);
+  }, [activeExercise?.muscleGroup]);
 
   // Editing state for sets
   const [editingSetId, setEditingSetId] = useState<string | null>(null);
@@ -602,8 +640,8 @@ export default function WorkoutPlayer({
               <TouchableOpacity onPress={() => setIsWorkoutActive(!isWorkoutActive)} style={styles.miniIconButton}>
                 {isWorkoutActive ? <Pause size={24} color="#0A0A0A" /> : <Play size={24} color="#0A0A0A" fill="#0A0A0A" />}
               </TouchableOpacity>
-              <TouchableOpacity 
-                onPress={onNext} 
+              <TouchableOpacity
+                onPress={onNext}
                 disabled={!hasNextExercise}
                 style={[styles.miniIconButton, !hasNextExercise && { opacity: 0.35 }]}
               >
@@ -617,13 +655,13 @@ export default function WorkoutPlayer({
       {/* Expanded Bottom Sheet Overlay */}
       {modalVisible && (
         <View style={styles.overlayRoot} pointerEvents="box-none">
-          <KeyboardAvoidingView 
+          <KeyboardAvoidingView
             style={styles.modalRoot}
             behavior={Platform.OS === 'ios' ? 'padding' : undefined}
             pointerEvents="box-none"
           >
             {/* Backdrop Overlay */}
-            <Animated.View 
+            <Animated.View
               style={[
                 styles.modalBackdrop,
                 {
@@ -635,15 +673,15 @@ export default function WorkoutPlayer({
                 },
               ]}
             >
-              <TouchableOpacity 
-                style={StyleSheet.absoluteFill} 
-                activeOpacity={1} 
-                onPress={() => closeModal()} 
+              <TouchableOpacity
+                style={StyleSheet.absoluteFill}
+                activeOpacity={1}
+                onPress={() => closeModal()}
               />
             </Animated.View>
 
             {/* Animated Sheet Container */}
-            <Animated.View 
+            <Animated.View
               {...panResponder.panHandlers}
               style={[
                 styles.modalContainer,
@@ -653,6 +691,35 @@ export default function WorkoutPlayer({
                 },
               ]}
             >
+              {/* Dynamic Tidal-Style Ambient Canvas */}
+              <View style={styles.ambientCanvasWrapper} pointerEvents="none">
+                {/* 1. Curated Atmospheric Base Gradient for Muscle Group */}
+                <LinearGradient
+                  colors={muscleCanvasColors}
+                  start={{ x: 0.5, y: 0 }}
+                  end={{ x: 0.5, y: 1 }}
+                  style={StyleSheet.absoluteFillObject}
+                />
+
+                {/* 2. Blurred Image Layer (extracts real-time color highlights from the actual exercise image) */}
+                <Image
+                  source={exerciseImageSource}
+                  style={styles.ambientCanvasImage}
+                  contentFit="cover"
+                  blurRadius={Platform.OS === 'ios' ? 70 : 45}
+                  autoplay={false}
+                  transition={350}
+                />
+
+                {/* 3. Tidal Vignette Gradient Falloff for perfect contrast and readability across entire canvas */}
+                <LinearGradient
+                  colors={['rgba(10, 10, 10, 0.2)', 'rgba(10, 10, 10, 0.45)', 'rgba(10, 10, 10, 0.7)']}
+                  locations={[0, 0.5, 1]}
+                  start={{ x: 0.5, y: 0 }}
+                  end={{ x: 0.5, y: 1 }}
+                  style={StyleSheet.absoluteFillObject}
+                />
+              </View>
               {/* Top Drag & Header Zone */}
               <View style={styles.dragHeaderZone}>
                 <View style={styles.sheetTopBar}>
@@ -669,8 +736,8 @@ export default function WorkoutPlayer({
                 </View>
 
                 {/* Dedicated Image Drag Zone with instant touch capture */}
-                <View 
-                  {...imagePanResponder.panHandlers} 
+                <View
+                  {...imagePanResponder.panHandlers}
                   style={styles.imageDragZone}
                   collapsable={false}
                 >
@@ -724,8 +791,8 @@ export default function WorkoutPlayer({
               </View>
 
               {/* Scrollable Sets Details */}
-              <ScrollView 
-                style={styles.exerciseDetails} 
+              <ScrollView
+                style={styles.exerciseDetails}
                 contentContainerStyle={{ paddingBottom: 32 }}
                 keyboardShouldPersistTaps="handled"
                 onScroll={(e) => {
@@ -746,7 +813,7 @@ export default function WorkoutPlayer({
                         >
                           {set.is_done && <Check size={16} color="#0A0A0A" strokeWidth={4} />}
                         </TouchableOpacity>
-                        
+
                         {isEditing ? (
                           <View style={styles.setInfoEdit}>
                             <View style={styles.editInputsGroup}>
@@ -865,10 +932,10 @@ export default function WorkoutPlayer({
                   </View>
 
                   <View style={styles.playbackControlsRow}>
-                    <TouchableOpacity 
-                      onPress={onPrevious} 
+                    <TouchableOpacity
+                      onPress={onPrevious}
                       disabled={!hasPreviousExercise}
-                      activeOpacity={0.7} 
+                      activeOpacity={0.7}
                       hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
                       style={{ opacity: hasPreviousExercise ? 1 : 0.3 }}
                     >
@@ -883,10 +950,10 @@ export default function WorkoutPlayer({
                       )}
                     </TouchableOpacity>
 
-                    <TouchableOpacity 
-                      onPress={onNext} 
+                    <TouchableOpacity
+                      onPress={onNext}
                       disabled={!hasNextExercise}
-                      activeOpacity={0.7} 
+                      activeOpacity={0.7}
                       hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
                       style={{ opacity: hasNextExercise ? 1 : 0.3 }}
                     >
@@ -895,8 +962,8 @@ export default function WorkoutPlayer({
                   </View>
 
                   <View style={styles.bottomUtilityRow}>
-                    <TouchableOpacity 
-                      style={styles.utilityBtn} 
+                    <TouchableOpacity
+                      style={styles.utilityBtn}
                       onPress={onOptionsPress}
                       activeOpacity={0.7}
                       hitSlop={{ top: 12, bottom: 12, left: 12, right: 8 }}
@@ -966,7 +1033,7 @@ const styles = StyleSheet.create({
     bottom: 0,
     left: 0,
     right: 0,
-    backgroundColor: '#0A0A0A',
+    backgroundColor: '#1E222B',
     borderTopLeftRadius: 16,
     borderTopRightRadius: 16,
     borderBottomLeftRadius: 0,
@@ -1066,6 +1133,20 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     paddingHorizontal: 16,
   },
+  ambientCanvasWrapper: {
+    ...StyleSheet.absoluteFillObject,
+    overflow: 'hidden',
+    borderTopLeftRadius: 24,
+    borderTopRightRadius: 24,
+  },
+  ambientCanvasImage: {
+    position: 'absolute',
+    top: -40,
+    left: -40,
+    right: -40,
+    bottom: -40,
+    opacity: 0.72,
+  },
   largeImage: {
     width: Math.min(width * 0.68, 270),
     height: Math.min(width * 0.68, 270),
@@ -1073,6 +1154,11 @@ const styles = StyleSheet.create({
     alignSelf: 'center',
     marginBottom: 10,
     borderRadius: 16,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.45,
+    shadowRadius: 16,
+    elevation: 10,
   },
   compactHeader: {
     flexDirection: 'row',

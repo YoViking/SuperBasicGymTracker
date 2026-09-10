@@ -363,10 +363,12 @@ export default function ExerciseLibrary({
   }, [activeMuscleFilter]);
 
   const isMuscleGroupActive = (group: string) => {
+    if (!activeMuscleFilter) return group === 'All' || group === 'Alla';
     if (activeMuscleFilter === group) return true;
-    if (group === 'All' && (activeMuscleFilter === 'Alla' || !activeMuscleFilter)) return true;
-    if (MUSCLE_GROUP_DISPLAY[group] && MUSCLE_GROUP_DISPLAY[group] === activeMuscleFilter) return true;
-    if (MUSCLE_GROUP_DISPLAY[activeMuscleFilter] && MUSCLE_GROUP_DISPLAY[activeMuscleFilter] === group) return true;
+    if (activeMuscleFilter.toLowerCase() === group.toLowerCase()) return true;
+    if ((group === 'All' || group === 'Alla') && (activeMuscleFilter === 'Alla' || activeMuscleFilter === 'All')) return true;
+    if (MUSCLE_GROUP_DISPLAY[group] && MUSCLE_GROUP_DISPLAY[group].toLowerCase() === activeMuscleFilter.toLowerCase()) return true;
+    if (MUSCLE_GROUP_DISPLAY[activeMuscleFilter] && MUSCLE_GROUP_DISPLAY[activeMuscleFilter].toLowerCase() === group.toLowerCase()) return true;
     return false;
   };
 
@@ -879,10 +881,14 @@ export default function ExerciseLibrary({
                         ]}
                       >
                         <Image
+                          key={`${mg.id}-${isActive ? 'active' : 'inactive'}`}
                           source={getMuscleCardImage(mg.id, isActive)}
-                          style={styles.muscleCardImage}
+                          style={[
+                            styles.muscleCardImage,
+                            isBookmark && styles.bookmarkCardImage,
+                          ]}
                           contentFit="contain"
-                          transition={150}
+                          priority="high"
                         />
                       </View>
                     </TouchableOpacity>
@@ -1246,15 +1252,15 @@ const styles = StyleSheet.create({
   },
   /* Större övningskort */
   exerciseCard: {
-    backgroundColor: '#1E222B',
-    borderRadius: 10,
+    backgroundColor: '#0A0A0A',
+    borderRadius: 16,
     marginBottom: 12,
     flexDirection: 'row',
     alignItems: 'center',
     overflow: 'hidden',
     height: 88, // Större kort: ökat från 70 till 88
-    borderWidth: 1,
-    borderColor: '#2D333F',
+    borderWidth: 1.5,
+    borderColor: '#27272A',
   },
   exerciseThumbnail: {
     width: 88, // Större thumbnail: ökat från 70 till 88
@@ -1442,7 +1448,7 @@ const styles = StyleSheet.create({
   },
   muscleCardImageWrapper: {
     position: 'absolute',
-    right: -6,
+    right: -4,
     top: 0,
     bottom: 0,
     width: 104,
@@ -1454,8 +1460,12 @@ const styles = StyleSheet.create({
     right: 10,
   },
   muscleCardImage: {
-    width: '100%',
-    height: '100%',
+    width: 100,
+    height: 100,
+  },
+  bookmarkCardImage: {
+    width: 58,
+    height: 58,
   },
   /* Sub-muscles */
   subMuscleChipsWrap: {

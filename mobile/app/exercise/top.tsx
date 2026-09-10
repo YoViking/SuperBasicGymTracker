@@ -330,8 +330,10 @@ const styles = StyleSheet.create({
     marginBottom: 10,
   },
   exerciseCard: {
-    backgroundColor: '#2A2E35',
-    borderRadius: 8,
+    backgroundColor: '#0A0A0A',
+    borderRadius: 16,
+    borderWidth: 1.5,
+    borderColor: '#27272A',
     marginBottom: 10,
     flexDirection: 'row',
     alignItems: 'center',

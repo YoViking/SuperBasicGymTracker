@@ -2,7 +2,8 @@ import React, { useState, useCallback, useMemo, useEffect } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, ActivityIndicator, Platform, FlatList, ListRenderItemInfo } from 'react-native';
 import { Image } from 'expo-image';
 import { useLocalSearchParams, useRouter, useFocusEffect } from 'expo-router';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
+import { LinearGradient } from 'expo-linear-gradient';
 import { ArrowLeft, MoreVertical, Edit2, Plus, Play } from 'lucide-react-native';
 import { supabase } from '../../src/lib/supabase';
 import { Workout } from '../../src/types';
@@ -13,6 +14,8 @@ import { useWorkoutSession, GroupedExercise, FetchedWorkoutExercise } from '../.
 export default function WorkoutDetailScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const router = useRouter();
+  const insets = useSafeAreaInsets();
+  const [isScrolled, setIsScrolled] = useState(false);
 
   const {
     activeWorkout,
@@ -208,28 +211,40 @@ export default function WorkoutDetailScreen() {
 
   const renderHeader = () => (
     <View style={styles.headerContainer}>
-      <View style={styles.topNav}>
-        <TouchableOpacity style={styles.backButton} onPress={() => router.back()}>
-          <ArrowLeft size={28} color="#F8FAFC" />
-        </TouchableOpacity>
-      </View>
-      
-      <View style={styles.defaultHeroWrapper}>
-        <Image
-          source={currentWorkout?.image_url ? { uri: currentWorkout.image_url } : getDefaultWorkoutImage(currentWorkout?.is_ai)}
-          style={styles.defaultHeroImage}
-          contentFit="cover"
+      <View style={styles.headerTopSection}>
+        <View style={styles.topOverscrollFiller} pointerEvents="none" />
+        <LinearGradient
+          colors={['#2A303A', '#1E232B', '#13161A', '#0A0A0A']}
+          locations={[0, 0.45, 0.8, 1]}
+          start={{ x: 0.5, y: 0 }}
+          end={{ x: 0.5, y: 1 }}
+          style={styles.headerGradient}
+          pointerEvents="none"
         />
-      </View>
 
-      <Text style={styles.workoutTitle}>{currentWorkout?.name}</Text>
-      <View style={styles.exercisesCountRow}>
-        <View style={styles.exercisesCountLine} />
-        <Text style={styles.exercisesCountText}>{displayGroupedExercises.length} ÖVNINGAR</Text>
-        <View style={styles.exercisesCountLine} />
-        <TouchableOpacity style={styles.editButton} onPress={() => router.push(`/workout/edit/${id}`)}>
-          <Edit2 size={20} color="#F8FAFC" />
-        </TouchableOpacity>
+        <View style={[styles.topNav, { paddingTop: (insets.top || 0) + 8 }]}>
+          <TouchableOpacity style={styles.backButton} onPress={() => router.back()}>
+            <ArrowLeft size={28} color="#F8FAFC" />
+          </TouchableOpacity>
+        </View>
+        
+        <View style={styles.defaultHeroWrapper}>
+          <Image
+            source={currentWorkout?.image_url ? { uri: currentWorkout.image_url } : getDefaultWorkoutImage(currentWorkout?.is_ai)}
+            style={styles.defaultHeroImage}
+            contentFit="cover"
+          />
+        </View>
+
+        <Text style={styles.workoutTitle}>{currentWorkout?.name}</Text>
+        <View style={styles.exercisesCountRow}>
+          <View style={styles.exercisesCountLine} />
+          <Text style={styles.exercisesCountText}>{displayGroupedExercises.length} ÖVNINGAR</Text>
+          <View style={styles.exercisesCountLine} />
+          <TouchableOpacity style={styles.editButton} onPress={() => router.push(`/workout/edit/${id}`)}>
+            <Edit2 size={20} color="#F8FAFC" />
+          </TouchableOpacity>
+        </View>
       </View>
 
       {displayGroupedExercises.length > 0 && (
@@ -346,7 +361,7 @@ export default function WorkoutDetailScreen() {
   };
 
   return (
-    <SafeAreaView style={styles.safeArea} edges={['top', 'left', 'right']}>
+    <SafeAreaView style={styles.safeArea} edges={['left', 'right']}>
       <View style={{ flex: 1, overflow: 'hidden' }}>
         <FlatList
           data={displayGroupedExercises}
@@ -357,8 +372,21 @@ export default function WorkoutDetailScreen() {
           renderItem={renderGroup}
           extraData={activeExerciseId}
           contentContainerStyle={styles.scrollContent}
+          onScroll={(e) => {
+            const offsetY = e.nativeEvent.contentOffset.y;
+            if (offsetY > 40 && !isScrolled) {
+              setIsScrolled(true);
+            } else if (offsetY <= 40 && isScrolled) {
+              setIsScrolled(false);
+            }
+          }}
+          scrollEventThrottle={16}
         />
       </View>
+
+      {isScrolled && insets.top > 0 && (
+        <View style={[styles.statusBarScrolledCover, { height: insets.top }]} pointerEvents="none" />
+      )}
 
       <AppBottomNav activeTab="workouts" />
     </SafeAreaView>
@@ -451,8 +479,37 @@ const styles = StyleSheet.create({
     right: -40, // push it to the right of the 60% container
     padding: 8,
   },
+  headerTopSection: {
+    width: '100%',
+    alignItems: 'center',
+    position: 'relative',
+    paddingBottom: 12,
+  },
+  headerGradient: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+  },
+  topOverscrollFiller: {
+    position: 'absolute',
+    top: -600,
+    left: 0,
+    right: 0,
+    height: 600,
+    backgroundColor: '#2A303A',
+  },
+  statusBarScrolledCover: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    backgroundColor: '#0A0A0A',
+    zIndex: 10,
+  },
   actionRow: {
-    marginTop: 18,
+    marginTop: 8,
     alignItems: 'center',
     width: '100%',
     paddingHorizontal: 16,
@@ -504,8 +561,10 @@ const styles = StyleSheet.create({
     paddingBottom: 160, // Space for mini player and bottom nav bar
   },
   exerciseCard: {
-    backgroundColor: '#27272A',
-    borderRadius: 8,
+    backgroundColor: '#0A0A0A',
+    borderRadius: 16,
+    borderWidth: 1.5,
+    borderColor: '#27272A',
     marginHorizontal: 16,
     marginBottom: 12,
     flexDirection: 'row',
@@ -528,12 +587,12 @@ const styles = StyleSheet.create({
   },
   playingCard: {
     borderColor: '#A3E635',
-    borderWidth: 1,
+    borderWidth: 1.5,
   },
   cardLeft: {
     width: 80,
     height: 80,
-    backgroundColor: '#F8FAFC',
+    backgroundColor: '#18181B',
     alignItems: 'center',
     justifyContent: 'center',
   },
