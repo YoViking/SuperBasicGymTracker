@@ -1,4 +1,29 @@
+import { createClient } from '@supabase/supabase-js';
+
+const supabaseUrl = process.env.EXPO_PUBLIC_SUPABASE_URL || process.env.SUPABASE_URL || '';
+const supabaseAnonKey = process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY || process.env.SUPABASE_ANON_KEY || '';
+const supabase = createClient(supabaseUrl, supabaseAnonKey);
+
 export async function POST(request: Request) {
+  // 1. Authenticate requester to protect against unauthorized API quota consumption
+  const authHeader = request.headers.get('Authorization') || request.headers.get('authorization');
+  const token = authHeader?.replace(/^Bearer\s+/i, '');
+
+  if (!token) {
+    return new Response(JSON.stringify({ error: 'Unauthorized: Missing Authorization header' }), {
+      status: 401,
+      headers: { 'Content-Type': 'application/json' },
+    });
+  }
+
+  const { data: { user }, error: authError } = await supabase.auth.getUser(token);
+  if (authError || !user) {
+    return new Response(JSON.stringify({ error: 'Unauthorized: Invalid or expired token' }), {
+      status: 401,
+      headers: { 'Content-Type': 'application/json' },
+    });
+  }
+
   let requestBody: any = {};
   try {
     requestBody = await request.json();
@@ -6,16 +31,28 @@ export async function POST(request: Request) {
     console.warn('Failed to parse request body:', e);
   }
 
-  const {
-    location = 'Gym',
-    equipment = [],
-    daysPerWeek = 3,
-    duration = '60m',
-    splitType = 'Auto/AI Recommendation',
-    injuries = [],
-    exclusions = '',
-    fitnessGoal = 'Muscle Growth (Hypertrophy)'
-  } = requestBody;
+  // 2. Validate, clamp and sanitize inputs to prevent resource exhaustion and prompt injection
+  const rawDays = Number(requestBody.daysPerWeek);
+  const daysPerWeek = Number.isInteger(rawDays) ? Math.min(Math.max(rawDays, 1), 7) : 3;
+
+  const rawExclusions = typeof requestBody.exclusions === 'string' ? requestBody.exclusions : '';
+  const sanitizedExclusions = rawExclusions
+    .replace(/[\r\n\x00-\x1F\x7F]+/g, ' ')
+    .trim()
+    .slice(0, 200);
+
+  const location = typeof requestBody.location === 'string' ? requestBody.location.slice(0, 50) : 'Gym';
+  const duration = typeof requestBody.duration === 'string' ? requestBody.duration.slice(0, 20) : '60m';
+  const splitType = typeof requestBody.splitType === 'string' ? requestBody.splitType.slice(0, 50) : 'Auto/AI Recommendation';
+  const fitnessGoal = typeof requestBody.fitnessGoal === 'string' ? requestBody.fitnessGoal.slice(0, 50) : 'Muscle Growth (Hypertrophy)';
+
+  const equipment = Array.isArray(requestBody.equipment)
+    ? requestBody.equipment.filter((e: any) => typeof e === 'string').map((e: string) => e.slice(0, 50))
+    : [];
+
+  const injuries = Array.isArray(requestBody.injuries)
+    ? requestBody.injuries.filter((i: any) => typeof i === 'string').map((i: string) => i.slice(0, 50))
+    : [];
 
   try {
     const apiKey = process.env.OPENCODE_API_KEY;
@@ -25,11 +62,11 @@ export async function POST(request: Request) {
 
     if (!apiKey || apiKey === 'your_opencode_api_key_here') {
       console.log('No OpenCode API key found. Using mock generator fallback.');
-      const mockProgram = generateMockProgram(location, equipment, daysPerWeek, duration, splitType, injuries, exclusions, fitnessGoal);
+      const mockProgram = generateMockProgram(location, equipment, daysPerWeek, duration, splitType, injuries, sanitizedExclusions, fitnessGoal);
       return Response.json(mockProgram);
     }
 
-    // System prompt for the expert coach
+    // System prompt for the expert coach (untrusted user inputs strictly kept OUT to prevent prompt injection)
     const systemPrompt = `You are an expert strength coach.
 Generate a balanced weekly workout program based on user constraints.
 Strictly avoid exercises that strain reported injury areas:
@@ -41,7 +78,7 @@ Strictly avoid exercises that strain reported injury areas:
 - If 'Ankles' is flagged: Avoid calf raises with heavy extension, deep squats, or running. Substitute with leg presses, seated calf raises, or swimming/cycling (cardio).
 
 Only select exercises matching the provided available equipment.
-Exclusions requested by the user: "${exclusions || 'None'}". Ensure you avoid any exercises or movements mentioned here.
+Strictly avoid any exercises or movements requested in the user's specific exclusions.
 
 Return ONLY a structured JSON response matching this exact schema:
 {
@@ -75,7 +112,7 @@ Return ONLY a structured JSON response matching this exact schema:
 - Target Workout Duration: ${duration}
 - Split Type: ${splitType}
 - Sensitive/Injured Body Parts: ${injuries.join(', ') || 'None'}
-- Specific Exclusions/Notes: ${exclusions || 'None'}
+- Specific Exclusions/Notes: ${sanitizedExclusions || 'None'}
 - Fitness Goal: ${fitnessGoal}`;
 
     console.log(`Calling OpenCode Zen API with model ${modelName}...`);
@@ -99,7 +136,7 @@ Return ONLY a structured JSON response matching this exact schema:
     if (!apiResponse.ok) {
       const errText = await apiResponse.text();
       console.warn(`OpenCode Zen API returned error status ${apiResponse.status}: ${errText}. Falling back to mock generator.`);
-      const mockProgram = generateMockProgram(location, equipment, daysPerWeek, duration, splitType, injuries, exclusions, fitnessGoal);
+      const mockProgram = generateMockProgram(location, equipment, daysPerWeek, duration, splitType, injuries, sanitizedExclusions, fitnessGoal);
       return Response.json(mockProgram);
     }
 
@@ -174,7 +211,7 @@ Return ONLY a structured JSON response matching this exact schema:
   } catch (error: any) {
     console.error('Error in API Route:', error);
     try {
-      const mockProgram = generateMockProgram(location, equipment, daysPerWeek, duration, splitType, injuries, exclusions, fitnessGoal);
+      const mockProgram = generateMockProgram(location, equipment, daysPerWeek, duration, splitType, injuries, sanitizedExclusions, fitnessGoal);
       return Response.json(mockProgram);
     } catch (fallbackError) {
       return new Response(JSON.stringify({ error: 'Failed to generate program' }), {

@@ -22,6 +22,8 @@ function notifyListeners(bookmarks: string[]) {
 
 /**
  * Fetches all bookmarked exercise IDs for the current user.
+ * Relies on local cache and the relational 'bookmarks' table.
+ * Avoids storing arrays in auth user_metadata to prevent JWT Token Bloat (HTTP 431).
  */
 export async function getBookmarkedExerciseIds(): Promise<string[]> {
   try {
@@ -50,23 +52,42 @@ export async function getBookmarkedExerciseIds(): Promise<string[]> {
       } catch {}
     }
 
-    // 2. Try Supabase user metadata
-    if (user?.user_metadata?.bookmarked_exercise_ids && Array.isArray(user.user_metadata.bookmarked_exercise_ids)) {
-      bookmarkedIds = user.user_metadata.bookmarked_exercise_ids;
-      await AsyncStorage.setItem(storageKey, JSON.stringify(bookmarkedIds));
-    } else if (user?.id) {
-      // 3. Try bookmarks table in Supabase if exists
+    // 2. Sync with database 'bookmarks' table for logged-in users
+    if (user?.id) {
       try {
         const { data: tableData, error: tableErr } = await supabase
           .from('bookmarks')
           .select('exercise_id')
           .eq('user_id', user.id);
 
-        if (!tableErr && tableData && tableData.length > 0) {
-          bookmarkedIds = Array.from(new Set([...bookmarkedIds, ...tableData.map((b: any) => b.exercise_id)]));
+        if (!tableErr && tableData) {
+          const dbIds = tableData.map((b: any) => b.exercise_id);
+          bookmarkedIds = Array.from(new Set([...bookmarkedIds, ...dbIds]));
           await AsyncStorage.setItem(storageKey, JSON.stringify(bookmarkedIds));
         }
-      } catch {}
+
+        // 3. One-time migration & cleanup of legacy user_metadata if present
+        const legacyMetadataIds = user?.user_metadata?.bookmarked_exercise_ids;
+        if (Array.isArray(legacyMetadataIds) && legacyMetadataIds.length > 0) {
+          // If table was empty, backfill from legacy metadata
+          if (!tableData || tableData.length === 0) {
+            const toInsert = legacyMetadataIds.map((exId: string) => ({
+              user_id: user.id,
+              exercise_id: exId,
+            }));
+            await supabase.from('bookmarks').insert(toInsert);
+            bookmarkedIds = Array.from(new Set([...bookmarkedIds, ...legacyMetadataIds]));
+            await AsyncStorage.setItem(storageKey, JSON.stringify(bookmarkedIds));
+          }
+
+          // Clear bloated array from JWT user_metadata to keep tokens lightweight
+          await supabase.auth.updateUser({
+            data: { bookmarked_exercise_ids: null },
+          }).catch(() => {});
+        }
+      } catch (err) {
+        console.warn('[BookmarkService] Error syncing bookmarks from database:', err);
+      }
     }
 
     memoryBookmarks = new Set(bookmarkedIds);
@@ -89,7 +110,8 @@ export async function isExerciseBookmarked(exerciseId: string): Promise<boolean>
 
 /**
  * Toggles bookmark status for an exercise.
- * Returns the new bookmarked state (true = bookmarked, false = unbookmarked).
+ * Persists to local AsyncStorage and the Supabase 'bookmarks' table.
+ * Does NOT write large arrays to auth user_metadata, protecting JWT headers.
  */
 export async function toggleExerciseBookmark(exerciseId: string): Promise<boolean> {
   if (!exerciseId) return false;
@@ -105,7 +127,7 @@ export async function toggleExerciseBookmark(exerciseId: string): Promise<boolea
       updatedBookmarks = [...currentBookmarks, exerciseId];
     }
 
-    // Update in-memory cache immediately
+    // 1. Update in-memory cache and notify UI immediately (0ms response)
     memoryBookmarks = new Set(updatedBookmarks);
     notifyListeners(updatedBookmarks);
 
@@ -113,16 +135,12 @@ export async function toggleExerciseBookmark(exerciseId: string): Promise<boolea
       data: { user },
     } = await supabase.auth.getUser();
 
+    // 2. Persist to local storage
     const storageKey = getStorageKey(user?.id);
     await AsyncStorage.setItem(storageKey, JSON.stringify(updatedBookmarks));
 
+    // 3. Persist to relational 'bookmarks' table in Supabase
     if (user?.id) {
-      // Sync to Supabase user metadata
-      await supabase.auth.updateUser({
-        data: { bookmarked_exercise_ids: updatedBookmarks },
-      });
-
-      // Also sync to bookmarks table if available
       try {
         if (isCurrentlyBookmarked) {
           await supabase
@@ -135,7 +153,9 @@ export async function toggleExerciseBookmark(exerciseId: string): Promise<boolea
             .from('bookmarks')
             .insert([{ user_id: user.id, exercise_id: exerciseId }]);
         }
-      } catch {}
+      } catch (dbErr) {
+        console.error('[BookmarkService] Database error toggling bookmark:', dbErr);
+      }
     }
 
     return !isCurrentlyBookmarked;
@@ -144,3 +164,4 @@ export async function toggleExerciseBookmark(exerciseId: string): Promise<boolea
     return false;
   }
 }
+

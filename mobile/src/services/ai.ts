@@ -65,8 +65,18 @@ export async function fetchAIProgram(inputs: {
   fitnessGoal: string;
   experienceLevel?: string;
 }): Promise<GeneratedProgram> {
-  const { location, equipment, daysPerWeek, duration, splitType, injuries, exclusions, fitnessGoal, experienceLevel } = inputs;
+  const { location, equipment, duration, splitType, injuries, fitnessGoal, experienceLevel } = inputs;
   
+  // Sanitize and clamp inputs
+  const rawDays = Number(inputs.daysPerWeek);
+  const daysPerWeek = Number.isInteger(rawDays) ? Math.min(Math.max(rawDays, 1), 7) : 3;
+
+  const rawExclusions = typeof inputs.exclusions === 'string' ? inputs.exclusions : '';
+  const sanitizedExclusions = rawExclusions
+    .replace(/[\r\n\x00-\x1F\x7F]+/g, ' ')
+    .trim()
+    .slice(0, 200);
+
   // Read keys. In Expo client, environment variables prefixed with EXPO_PUBLIC_ are exposed.
   const geminiKey = process.env.EXPO_PUBLIC_GEMINI_API_KEY || process.env.GEMINI_API_KEY;
   const opencodeKey = process.env.EXPO_PUBLIC_OPENCODE_API_KEY || process.env.OPENCODE_API_KEY;
@@ -79,7 +89,7 @@ export async function fetchAIProgram(inputs: {
   // Fallback if no API key is provided
   if (!activeGeminiKey && !activeOpenCodeKey) {
     console.log('No AI API key found on client. Using client-side mock generator.');
-    return generateMockProgram(inputs);
+    return generateMockProgram({ ...inputs, daysPerWeek, exclusions: sanitizedExclusions });
   }
 
   try {
@@ -106,7 +116,7 @@ Strictly avoid exercises that strain reported injury areas:
 - If 'Ankles' is flagged: Avoid calf raises with heavy extension, deep squats, or running. Substitute with leg presses, seated calf raises, or swimming/cycling (cardio).
 
 Only select exercises matching the provided available equipment.
-Exclusions requested by the user: "${exclusions || 'None'}". Ensure you avoid any exercises or movements mentioned here.
+Strictly avoid any exercises or movements requested in the user's specific exclusions.
 
 Duration & Volume Guidelines:
 The number of exercises per workout MUST match the target duration consistently:
@@ -149,7 +159,7 @@ Return ONLY a structured JSON response matching this exact schema:
 - Target Workout Duration: ${duration}
 - Split Type: ${splitType}
 - Sensitive/Injured Body Parts: ${injuries.join(', ') || 'None'}
-- Specific Exclusions/Notes: ${exclusions || 'None'}
+- Specific Exclusions/Notes: ${sanitizedExclusions || 'None'}
 - Fitness Goal: ${fitnessGoal}
 CRITICAL: Obey the equipment list strictly. If only Bodyweight is selected, do NOT prescribe dumbbells, barbells, or other weighted exercises!`;
 
@@ -540,6 +550,12 @@ export async function fetchAISingleWorkout(inputs: {
 }): Promise<GeneratedWorkout> {
   const { workoutName, focus, duration, equipment, location = 'Gym', injuries = [], exclusions = '', fitnessGoal = 'Muskeltillväxt', experienceLevel = 'Intermediate' } = inputs;
 
+  const rawExclusions = typeof exclusions === 'string' ? exclusions : '';
+  const sanitizedExclusions = rawExclusions
+    .replace(/[\r\n\x00-\x1F\x7F]+/g, ' ')
+    .trim()
+    .slice(0, 200);
+
   const geminiKey = process.env.EXPO_PUBLIC_GEMINI_API_KEY || process.env.GEMINI_API_KEY;
   const opencodeKey = process.env.EXPO_PUBLIC_OPENCODE_API_KEY || process.env.OPENCODE_API_KEY;
   const opencodeModel = process.env.EXPO_PUBLIC_OPENCODE_MODEL || process.env.OPENCODE_MODEL || 'mimo-v2.5-free';
@@ -556,7 +572,7 @@ export async function fetchAISingleWorkout(inputs: {
 
   if (!activeGeminiKey && !activeOpenCodeKey) {
     console.log('No AI key found. Using mock single workout generator.');
-    return generateMockSingleWorkout(inputs, targetCount);
+    return generateMockSingleWorkout({ ...inputs, exclusions: sanitizedExclusions }, targetCount);
   }
 
   try {
@@ -581,17 +597,8 @@ Strictly avoid exercises that strain reported injury areas:
 - If 'Elbows' is flagged: Avoid skull crushers, heavy tricep pushdowns, or chin-ups. Substitute with neutral grip pushdowns, hammer curls, or light extensions.
 - If 'Ankles' is flagged: Avoid calf raises with heavy extension, deep squats, or running. Substitute with leg presses, seated calf raises, or swimming/cycling (cardio).
 
-Constraints:
-- Location: ${location}
-- User Level: ${experienceLevel || 'Intermediate'}
-- Focus / Muscles: ${focus}
-- Duration: ~${duration} (${targetCount} exercises total)
-- Available Equipment: ${equipment.join(', ') || 'All standard equipment'}
-- Sensitive / Injured areas: ${injuries.join(', ') || 'None'}
-- Specific Exclusions: ${exclusions || 'None'}
-- Goal: ${fitnessGoal}
+Strictly avoid any exercises or movements requested in the user's specific exclusions.
 
-Avoid any exercise that compromises flagged injuries.
 Return ONLY valid JSON with this exact structure:
 {
   "dayName": "${workoutName || focus + ' - AI'}",
@@ -610,6 +617,16 @@ Return ONLY valid JSON with this exact structure:
   ]
 }`;
 
+    const userPrompt = `Generate a single workout with the following constraints:
+- Location: ${location}
+- User Level: ${experienceLevel || 'Intermediate'}
+- Focus / Muscles: ${focus}
+- Duration: ~${duration} (${targetCount} exercises total)
+- Available Equipment: ${equipment.join(', ') || 'All standard equipment'}
+- Sensitive / Injured areas: ${injuries.join(', ') || 'None'}
+- Specific Exclusions/Notes: ${sanitizedExclusions || 'None'}
+- Goal: ${fitnessGoal}`;
+
     let content: string | null = null;
     if (activeGeminiKey) {
       const response = await fetch(
@@ -618,7 +635,7 @@ Return ONLY valid JSON with this exact structure:
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
-            contents: [{ role: 'user', parts: [{ text: systemPrompt }] }],
+            contents: [{ role: 'user', parts: [{ text: `${systemPrompt}\n\n${userPrompt}` }] }],
             generationConfig: { responseMimeType: 'application/json' },
           }),
         }
@@ -636,7 +653,10 @@ Return ONLY valid JSON with this exact structure:
         },
         body: JSON.stringify({
           model: opencodeModel,
-          messages: [{ role: 'system', content: systemPrompt }],
+          messages: [
+            { role: 'system', content: systemPrompt },
+            { role: 'user', content: userPrompt }
+          ],
           response_format: { type: 'json_object' }
         }),
       });
