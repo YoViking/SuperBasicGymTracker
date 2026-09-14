@@ -20,7 +20,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { Image } from 'expo-image';
 import { LinearGradient } from 'expo-linear-gradient';
-import { Play, Pause, SkipForward, SkipBack, Timer, MoreHorizontal, Check, X, Dumbbell, ChevronRight, CircleQuestionMark, Pencil, Plus, RotateCcw } from 'lucide-react-native';
+import { Play, Pause, SkipForward, SkipBack, Timer, MoreHorizontal, Check, X, Dumbbell, ChevronRight, CircleQuestionMark, Pencil, Plus, RotateCcw, Trash2 } from 'lucide-react-native';
 import { Audio } from 'expo-av';
 import * as Notifications from 'expo-notifications';
 import { activateKeepAwakeAsync, deactivateKeepAwake } from 'expo-keep-awake';
@@ -78,6 +78,16 @@ const WORKOUT_GUIDE_ITEMS: GuideStepItem[] = [
     badgeTextColor: '#A3E635',
     title: 'Ändra reps & vikt',
     description: 'Håll ned fingret på raden med reps och vikt för att snabbt ändra siffrorna för det specifika setet.',
+  },
+  {
+    icon: Plus,
+    iconColor: '#A3E635',
+    iconBgColor: 'rgba(163, 230, 53, 0.12)',
+    badge: 'Knapp',
+    badgeBgColor: 'rgba(163, 230, 53, 0.15)',
+    badgeTextColor: '#A3E635',
+    title: 'Lägg till fler set',
+    description: 'Tryck på "Lägg till set" under raderna med reps och vikt för att snabbt lägga till ett extra set.',
   },
   {
     icon: Timer,
@@ -141,6 +151,8 @@ interface WorkoutPlayerProps {
   onPrevious: () => void;
   onToggleSet: (setId: string, currentStatus: boolean) => void;
   onUpdateSet?: (setId: string, reps: number, weight: number) => void;
+  onAddSet?: () => void;
+  onDeleteSet?: (setId: string) => void;
   onFinishPress?: () => void;
   workoutTimeElapsed: number;
   isWorkoutActive: boolean;
@@ -164,6 +176,8 @@ export default function WorkoutPlayer({
   onPrevious,
   onToggleSet,
   onUpdateSet,
+  onAddSet,
+  onDeleteSet,
   onFinishPress,
   workoutTimeElapsed,
   isWorkoutActive,
@@ -847,6 +861,19 @@ export default function WorkoutPlayer({
                               </View>
                             </View>
                             <View style={styles.editActions}>
+                              {activeExercise.sets.length > 1 && Boolean(onDeleteSet) && (
+                                <TouchableOpacity
+                                  style={styles.deleteEditBtn}
+                                  onPress={() => {
+                                    const setToDelete = set.id;
+                                    handleCancelEdit();
+                                    onDeleteSet?.(setToDelete);
+                                  }}
+                                  activeOpacity={0.7}
+                                >
+                                  <Trash2 size={16} color="#EF4444" />
+                                </TouchableOpacity>
+                              )}
                               <TouchableOpacity style={styles.saveEditBtn} onPress={handleSaveEdit} activeOpacity={0.7}>
                                 <Check size={18} color="#0A0A0A" strokeWidth={3} />
                               </TouchableOpacity>
@@ -869,6 +896,20 @@ export default function WorkoutPlayer({
                       </View>
                     );
                   })}
+
+                  {/* Add New Set Button */}
+                  {!editingSetId && Boolean(onAddSet) && (
+                    <TouchableOpacity
+                      style={styles.addSetBtn}
+                      onPress={onAddSet}
+                      activeOpacity={0.7}
+                    >
+                      <View style={styles.addSetIconWrapper}>
+                        <Plus size={16} color="#A3E635" strokeWidth={2.5} />
+                      </View>
+                      <Text style={styles.addSetBtnText}>Lägg till set</Text>
+                    </TouchableOpacity>
+                  )}
 
                   {/* Exercise Completion Banner */}
                   {activeExercise.sets && activeExercise.sets.length > 0 && activeExercise.sets.every((s: any) => s.is_done) && !hasNextExercise && (
@@ -1307,6 +1348,41 @@ const styles = StyleSheet.create({
     height: 34,
     justifyContent: 'center',
     alignItems: 'center',
+  },
+  deleteEditBtn: {
+    backgroundColor: 'rgba(239, 68, 68, 0.15)',
+    borderRadius: 8,
+    width: 34,
+    height: 34,
+    justifyContent: 'center',
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: 'rgba(239, 68, 68, 0.35)',
+  },
+  addSetBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    minHeight: 44,
+    paddingVertical: 4,
+    marginTop: 2,
+    alignSelf: 'flex-start',
+  },
+  addSetIconWrapper: {
+    width: 28,
+    height: 28,
+    borderRadius: 6,
+    backgroundColor: 'rgba(163, 230, 53, 0.12)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: 16,
+    borderWidth: 1,
+    borderColor: 'rgba(163, 230, 53, 0.35)',
+    borderStyle: 'dashed',
+  },
+  addSetBtnText: {
+    color: '#A3E635',
+    fontSize: 16,
+    fontWeight: '600',
   },
   playerBottom: {
     paddingHorizontal: 20,

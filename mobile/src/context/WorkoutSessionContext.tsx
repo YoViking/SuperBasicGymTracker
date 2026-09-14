@@ -61,6 +61,8 @@ interface WorkoutSessionContextType {
   handlePreviousExercise: () => void;
   toggleSetStatus: (setId: string, currentStatus: boolean) => void;
   handleUpdateSet: (setId: string, reps: number, weight: number) => Promise<void>;
+  handleAddSet: (exerciseId?: string) => Promise<void>;
+  handleDeleteSet: (setId: string) => Promise<void>;
   nameModalVisible: boolean;
   openNameModal: () => void;
   closeNameModal: () => void;
@@ -258,6 +260,126 @@ export function WorkoutSessionProvider({ children }: { children: React.ReactNode
       console.error('Error in handleUpdateSet:', error);
     }
   }, []);
+
+  const handleAddSet = useCallback(async (exerciseId?: string) => {
+    const targetExerciseId = exerciseId || activeExerciseIdRef.current;
+    if (!targetExerciseId) return;
+
+    const currentGroups = groupedExercisesRef.current;
+    const targetGroup = currentGroups.find(g => g.exerciseId === targetExerciseId);
+    if (!targetGroup) return;
+
+    const lastSet = targetGroup.sets[targetGroup.sets.length - 1];
+    const nextSetNumber = (lastSet?.sets ?? targetGroup.sets.length) + 1;
+    const defaultReps = lastSet?.reps ?? 10;
+    const defaultWeight = lastSet?.weight ?? 0;
+    const customName = lastSet?.custom_name || targetGroup.sets[0]?.custom_name || undefined;
+    const currentWorkoutId = activeWorkoutRef.current?.id;
+
+    const tempId = `tmp-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`;
+    const newSet: FetchedWorkoutExercise = {
+      id: tempId,
+      workout_id: currentWorkoutId || '',
+      exercise_id: targetExerciseId,
+      sets: nextSetNumber,
+      reps: defaultReps,
+      weight: defaultWeight,
+      is_done: false,
+      order_index: targetGroup.order_index ?? 0,
+      custom_name: customName,
+      exercise: {
+        name: targetGroup.exerciseName,
+        muscle_group: targetGroup.muscleGroup,
+        gifUrl: targetGroup.gifUrl,
+        equipment: targetGroup.equipment,
+      },
+    };
+
+    setGroupedExercises(prev => prev.map(g => {
+      if (g.exerciseId === targetExerciseId) {
+        return {
+          ...g,
+          sets: [...g.sets, newSet],
+        };
+      }
+      return g;
+    }));
+
+    if (currentWorkoutId && !currentWorkoutId.startsWith('tmp-')) {
+      try {
+        const { data, error } = await supabase
+          .from('workout_exercises')
+          .insert([{
+            workout_id: currentWorkoutId,
+            exercise_id: targetExerciseId,
+            sets: nextSetNumber,
+            reps: defaultReps,
+            weight: defaultWeight,
+            is_done: false,
+            order_index: targetGroup.order_index ?? 0,
+            custom_name: customName || null,
+          }])
+          .select()
+          .single();
+
+        if (error) {
+          console.error('Error adding set to database:', error);
+        } else if (data) {
+          setGroupedExercises(prev => prev.map(g => {
+            if (g.exerciseId === targetExerciseId) {
+              return {
+                ...g,
+                sets: g.sets.map(s => s.id === tempId ? { ...s, id: data.id } : s),
+              };
+            }
+            return g;
+          }));
+        }
+      } catch (error) {
+        console.error('Error in handleAddSet database insert:', error);
+      }
+    }
+
+    triggerWorkoutUpdate();
+  }, [triggerWorkoutUpdate]);
+
+  const handleDeleteSet = useCallback(async (setId: string) => {
+    const currentGroups = groupedExercisesRef.current;
+    const targetGroup = currentGroups.find(g => g.sets.some(s => s.id === setId));
+    if (!targetGroup || targetGroup.sets.length <= 1) {
+      if (Platform.OS === 'android') {
+        ToastAndroid.show('Övningen måste ha minst ett set', ToastAndroid.SHORT);
+      }
+      return;
+    }
+
+    setGroupedExercises(prev => prev.map(g => {
+      if (g.sets.some(s => s.id === setId)) {
+        return {
+          ...g,
+          sets: g.sets.filter(s => s.id !== setId),
+        };
+      }
+      return g;
+    }));
+
+    try {
+      if (!setId.startsWith('tmp-')) {
+        const { error } = await supabase
+          .from('workout_exercises')
+          .delete()
+          .eq('id', setId);
+
+        if (error) {
+          console.error('Error deleting set from database:', error);
+        }
+      }
+    } catch (error) {
+      console.error('Error in handleDeleteSet:', error);
+    }
+
+    triggerWorkoutUpdate();
+  }, [triggerWorkoutUpdate]);
 
   const refreshWorkoutExercises = useCallback(async (targetWorkoutId?: string, nextExerciseId?: string) => {
     const wId = targetWorkoutId || activeWorkout?.id;
@@ -701,6 +823,8 @@ export function WorkoutSessionProvider({ children }: { children: React.ReactNode
         handlePreviousExercise,
         toggleSetStatus,
         handleUpdateSet,
+        handleAddSet,
+        handleDeleteSet,
         nameModalVisible,
         openNameModal,
         closeNameModal,

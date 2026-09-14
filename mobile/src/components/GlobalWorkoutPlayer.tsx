@@ -24,6 +24,8 @@ export default function GlobalWorkoutPlayer() {
     handlePreviousExercise,
     toggleSetStatus,
     handleUpdateSet,
+    handleAddSet,
+    handleDeleteSet,
     workoutTimeElapsed,
     isWorkoutActive,
     setIsWorkoutActive,
@@ -87,6 +89,8 @@ export default function GlobalWorkoutPlayer() {
           hasPreviousExercise={hasPreviousExercise}
           onToggleSet={toggleSetStatus}
           onUpdateSet={handleUpdateSet}
+          onAddSet={() => handleAddSet(activeExercise.exerciseId)}
+          onDeleteSet={handleDeleteSet}
           onFinishPress={openNameModal}
           workoutTimeElapsed={workoutTimeElapsed}
           isWorkoutActive={isWorkoutActive}
