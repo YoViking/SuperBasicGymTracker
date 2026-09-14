@@ -56,7 +56,9 @@ export default function TopExercisesScreen() {
       const { data, error } = await supabase
         .from('exercise_library')
         .select('*')
-        .limit(3000);
+        .gt('completions_count', 0)
+        .order('completions_count', { ascending: false })
+        .limit(100);
 
       if (error) {
         console.error('Error fetching exercises:', error.message);
