@@ -19,22 +19,7 @@ import { ArrowLeft, MoreVertical, Plus, Dumbbell, Bookmark, EyeOff } from 'lucid
 import { supabase } from '../../src/lib/supabase';
 import { ExerciseLibrary as Exercise } from '../../src/types';
 import { useBookmarks } from '../../src/hooks/useBookmarks';
-
-const MUSCLE_GROUP_DISPLAY: Record<string, string> = {
-  Chest: 'Bröst',
-  Back: 'Rygg',
-  Legs: 'Ben',
-  Arms: 'Armar',
-  Shoulders: 'Axlar',
-  Core: 'Core',
-  Glutes: 'Glutes',
-  Other: 'Övrigt',
-  Bröst: 'Bröst',
-  Rygg: 'Rygg',
-  Ben: 'Ben',
-  Armar: 'Armar',
-  Axlar: 'Axlar',
-};
+import { MUSCLE_GROUP_DISPLAY } from '../../src/utils/muscleHierarchy';
 
 const MUSCLE_GROUP_ORDER = ['Bröst', 'Rygg', 'Ben', 'Armar', 'Axlar', 'Core', 'Glutes', 'Övrigt'];
 

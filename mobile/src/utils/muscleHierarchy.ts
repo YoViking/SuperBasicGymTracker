@@ -26,6 +26,80 @@ export const TARGET_DISPLAY_SV: Record<string, string> = {
   other: 'Övrigt'
 };
 
+export const MUSCLE_COLORS: Record<string, string> = {
+  Chest: '#A3E635',     // Lime
+  Back: '#3B82F6',      // Blue
+  Legs: '#8B5CF6',      // Purple
+  Arms: '#EF4444',      // Red
+  Shoulders: '#F59E0B', // Orange
+  Core: '#10B981',      // Emerald
+  Glutes: '#EC4899',    // Pink
+  Other: '#6B7280',     // Gray
+};
+
+export const SWEDISH_TO_ENGLISH_MUSCLE: Record<string, string> = {
+  'Bröst': 'Chest',
+  'Rygg': 'Back',
+  'Ben': 'Legs',
+  'Rumpa': 'Legs', // Group glutes into Legs for stats simplicity
+  'Armar': 'Arms',
+  'Arm': 'Arms',
+  'Axlar': 'Shoulders',
+  'Axel': 'Shoulders',
+  'Mage': 'Core',
+  'Glutes': 'Legs',
+};
+
+export const MUSCLE_GROUP_DISPLAY: Record<string, string> = {
+  All: 'Alla',
+  Alla: 'Alla',
+  Chest: 'Bröst',
+  Back: 'Rygg',
+  Legs: 'Ben',
+  Arms: 'Armar',
+  Shoulders: 'Axlar',
+  Core: 'Core',
+  Glutes: 'Glutes',
+  Other: 'Övrigt',
+  Bookmarked: 'Bokmärkta',
+  Bröst: 'Bröst',
+  Rygg: 'Rygg',
+  Ben: 'Ben',
+  Armar: 'Armar',
+  Axlar: 'Axlar',
+};
+
+export interface MuscleDistributionItem {
+  value: number;
+  text: string;
+  color: string;
+}
+
+/**
+ * Calculates aggregated muscle group set distribution for pie/donut charts.
+ * Translates localized muscle names to English standard groups and groups sets.
+ */
+export function calculateMuscleDistribution(
+  exerciseLogs: Array<{ muscle_group?: string | null; sets?: number | null }>,
+  colors: Record<string, string> = MUSCLE_COLORS
+): MuscleDistributionItem[] {
+  const muscleCounts: Record<string, number> = {};
+
+  for (const ex of exerciseLogs) {
+    let mg = ex.muscle_group || 'Other';
+    mg = SWEDISH_TO_ENGLISH_MUSCLE[mg] || mg;
+    muscleCounts[mg] = (muscleCounts[mg] || 0) + (ex.sets || 0);
+  }
+
+  return Object.entries(muscleCounts)
+    .map(([mg, count]) => ({
+      value: count,
+      text: mg,
+      color: colors[mg] || colors['Other'] || '#6B7280',
+    }))
+    .sort((a, b) => b.value - a.value);
+}
+
 export const GROUP_SUB_MUSCLES: Record<string, MuscleSubGroup[]> = {
   Arms: [
     { id: 'triceps', label: 'Triceps' },
