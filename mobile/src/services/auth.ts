@@ -5,6 +5,7 @@ import Constants, { ExecutionEnvironment } from 'expo-constants';
 import * as AppleAuthentication from 'expo-apple-authentication';
 import * as Crypto from 'expo-crypto';
 import { supabase } from '../lib/supabase';
+import { cacheService } from './cacheService';
 
 // Complete any pending auth sessions on web or Android
 WebBrowser.maybeCompleteAuthSession();
@@ -26,7 +27,13 @@ export interface HandleUrlResult {
  */
 export async function handleAuthUrl(url: string): Promise<HandleUrlResult> {
   if (!url) return { success: false };
-  console.log('[Auth] Handling Auth URL:', url);
+  // Sanitize logged URL to prevent credential leakage (tokens in hash/query)
+  try {
+    const urlObj = new URL(url);
+    console.log('[Auth] Handling Auth URL scheme:', `${urlObj.protocol}//${urlObj.hostname}${urlObj.pathname}`);
+  } catch {
+    console.log('[Auth] Handling Auth URL [sanitized]');
+  }
 
   try {
     let accessToken: string | null = null;
@@ -220,11 +227,11 @@ export async function isAppleAuthAvailable(): Promise<boolean> {
  */
 export async function signInWithApple(): Promise<AuthResult> {
   try {
-    // Generate a secure raw nonce
-    const rawNonce =
-      Math.random().toString(36).substring(2, 15) +
-      Math.random().toString(36).substring(2, 15) +
-      Date.now().toString(36);
+    // Generate a cryptographically secure raw nonce
+    const randomBytes = await Crypto.getRandomBytesAsync(32);
+    const rawNonce = Array.from(randomBytes)
+      .map((b) => b.toString(16).padStart(2, '0'))
+      .join('');
 
     // Hash the nonce using SHA-256 for Apple request
     const hashedNonce = await Crypto.digestStringAsync(
@@ -358,6 +365,86 @@ export async function updatePassword(newPassword: string): Promise<AuthResult> {
     return {
       success: false,
       error: err?.message || 'Kunde inte uppdatera lösenordet',
+    };
+  }
+}
+
+/**
+ * Permanently deletes the current user's account and associated data.
+ * Adheres to Apple App Store Guideline 5.1.1(v) & GDPR requirements.
+ */
+export async function deleteUserAccount(): Promise<AuthResult> {
+  try {
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) {
+      return { success: false, error: 'Ingen inloggad användare hittades' };
+    }
+
+    const userId = user.id;
+
+    // 1. Try calling Supabase RPC if configured on backend
+    const { error: rpcError } = await supabase.rpc('delete_user_account');
+
+    if (rpcError) {
+      console.log('[Auth] RPC delete_user_account not found or failed, cleaning up user data directly:', rpcError.message);
+
+      // Clean up bookmarks
+      await supabase.from('bookmarks').delete().eq('user_id', userId);
+
+      // Clean up workout logs & exercise logs
+      const { data: logs } = await supabase
+        .from('workout_logs')
+        .select('id')
+        .eq('user_id', userId);
+
+      if (logs && logs.length > 0) {
+        const logIds = logs.map((l) => l.id);
+        await supabase
+          .from('workout_exercise_logs')
+          .delete()
+          .in('workout_log_id', logIds);
+
+        await supabase
+          .from('workout_logs')
+          .delete()
+          .eq('user_id', userId);
+      }
+
+      // Clean up workouts & workout exercises
+      const { data: workouts } = await supabase
+        .from('workouts')
+        .select('id')
+        .eq('user_id', userId);
+
+      if (workouts && workouts.length > 0) {
+        const workoutIds = workouts.map((w) => w.id);
+        await supabase
+          .from('workout_exercises')
+          .delete()
+          .in('workout_id', workoutIds);
+
+        await supabase
+          .from('workouts')
+          .delete()
+          .eq('user_id', userId);
+      }
+
+      // Clean up folders
+      await supabase.from('folders').delete().eq('user_id', userId);
+    }
+
+    // 2. Clear all local cache and user storage
+    await cacheService.clearAll();
+
+    // 3. Sign out of Supabase
+    await supabase.auth.signOut();
+
+    return { success: true };
+  } catch (err: any) {
+    console.error('[Auth] Error deleting user account:', err);
+    return {
+      success: false,
+      error: err?.message || 'Ett oväntat fel inträffade vid radering av kontot',
     };
   }
 }

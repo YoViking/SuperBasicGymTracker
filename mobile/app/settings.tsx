@@ -1,9 +1,10 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, Switch, Modal, Pressable, Platform, ScrollView, Linking, Alert } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, Switch, Modal, Pressable, Platform, ScrollView, Linking, Alert, ActivityIndicator } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter, Stack } from 'expo-router';
-import { ArrowLeft, ChevronRight, Check, LogOut, Sparkles, Bug, Mail } from 'lucide-react-native';
+import { ArrowLeft, ChevronRight, Check, LogOut, Sparkles, Bug, Mail, Trash2 } from 'lucide-react-native';
 import { supabase } from '../src/lib/supabase';
+import { deleteUserAccount } from '../src/services/auth';
 import OnboardingWizard from '../src/components/onboarding/OnboardingWizard';
 import {
   REST_TIMER_OPTIONS,
@@ -22,6 +23,7 @@ export default function SettingsScreen() {
   const [isTimerModalVisible, setIsTimerModalVisible] = useState<boolean>(false);
   const [isOnboardingModalVisible, setIsOnboardingModalVisible] = useState<boolean>(false);
   const [userEmail, setUserEmail] = useState<string>('');
+  const [isDeletingAccount, setIsDeletingAccount] = useState<boolean>(false);
 
   useEffect(() => {
     loadSettings();
@@ -61,6 +63,44 @@ export default function SettingsScreen() {
   const handleSignOut = async () => {
     await supabase.auth.signOut();
     router.replace('/');
+  };
+
+  const handleDeleteAccount = () => {
+    Alert.alert(
+      'Radera konto permanent?',
+      'Är du helt säker på att du vill radera ditt konto? Alla dina sparade träningspass, personliga rekord, mappar och historik raderas permanent och kan inte återställas.',
+      [
+        { text: 'Avbryt', style: 'cancel' },
+        {
+          text: 'Ja, radera permanent',
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              setIsDeletingAccount(true);
+              const result = await deleteUserAccount();
+              if (result.success) {
+                Alert.alert(
+                  'Konto raderat',
+                  'Ditt konto och alla dina träningsdata har raderats permanent.',
+                  [
+                    {
+                      text: 'OK',
+                      onPress: () => router.replace('/auth'),
+                    },
+                  ]
+                );
+              } else {
+                Alert.alert('Kunde inte radera konto', result.error || 'Ett fel uppstod vid radering av kontot.');
+              }
+            } catch (err: any) {
+              Alert.alert('Fel', err?.message || 'Ett oväntat fel inträffade vid radering.');
+            } finally {
+              setIsDeletingAccount(false);
+            }
+          },
+        },
+      ]
+    );
   };
 
   const handleReportBug = async () => {
@@ -211,6 +251,30 @@ export default function SettingsScreen() {
                 </Text>
               </View>
               <ChevronRight size={20} color="#94A3B8" />
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={[styles.settingCard, { marginTop: 12, borderWidth: 1, borderColor: 'rgba(239, 68, 68, 0.3)' }]}
+              onPress={handleDeleteAccount}
+              disabled={isDeletingAccount}
+              activeOpacity={0.7}
+            >
+              <View style={styles.iconSettingContainer}>
+                <View style={[styles.settingIconWrapper, { backgroundColor: 'rgba(239, 68, 68, 0.15)' }]}>
+                  {isDeletingAccount ? (
+                    <ActivityIndicator size="small" color="#EF4444" />
+                  ) : (
+                    <Trash2 size={20} color="#EF4444" />
+                  )}
+                </View>
+                <View style={styles.settingTextContainer}>
+                  <Text style={[styles.settingTitle, { color: '#EF4444' }]}>Radera konto</Text>
+                  <Text style={styles.settingSubtitle}>
+                    Radera ditt konto och all sparad träningsdata permanent
+                  </Text>
+                </View>
+              </View>
+              <ChevronRight size={20} color="#EF4444" />
             </TouchableOpacity>
           </View>
         ) : null}
