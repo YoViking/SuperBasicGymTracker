@@ -282,8 +282,27 @@ export default function ExerciseLibrary({
     }
   }, [defaultSubFilter]);
 
+  const EXERCISE_CACHE_KEY = 'enriched_exercise_library';
+  const EXERCISE_CACHE_TTL = 24 * 60 * 60 * 1000; // 24 hours
+
   const fetchExercises = async () => {
     try {
+      // 1. Try instantaneous in-memory cache (0ms)
+      const memCached = cacheService.get<Exercise[]>(EXERCISE_CACHE_KEY, 'global', EXERCISE_CACHE_TTL);
+      if (memCached && memCached.length > 0) {
+        setExercises(memCached);
+        setLoading(false);
+        return;
+      }
+
+      // 2. Try persistent AsyncStorage cache
+      const asyncCached = await cacheService.getAsync<Exercise[]>(EXERCISE_CACHE_KEY, 'global', EXERCISE_CACHE_TTL);
+      if (asyncCached && asyncCached.length > 0) {
+        setExercises(asyncCached);
+        setLoading(false);
+        return;
+      }
+
       setLoading(true);
       const { data, error } = await supabase
         .from('exercise_library')
@@ -308,6 +327,7 @@ export default function ExerciseLibrary({
       });
 
       setExercises(enriched);
+      await cacheService.set(EXERCISE_CACHE_KEY, 'global', enriched);
     } catch (error) {
       console.error('Error:', error);
     } finally {

@@ -40,10 +40,55 @@ export async function detectWorkoutRecords(
   const achievements: ExerciseAchievement[] = [];
 
   try {
-    for (const ex of exercises) {
+    // 1. Filter exercises that have completed sets with reps
+    const exercisesToEvaluate = exercises.filter(ex => {
       const doneSets = ex.sets.filter(s => s.is_done && s.reps > 0);
-      if (doneSets.length === 0) continue;
+      if (doneSets.length === 0) return false;
+      const maxWeight = Math.max(...doneSets.map(s => s.weight || 0));
+      const maxReps = Math.max(...doneSets.map(s => s.reps || 0));
+      return maxWeight > 0 || maxReps > 0;
+    });
 
+    if (exercisesToEvaluate.length === 0) {
+      return achievements;
+    }
+
+    const uniqueExerciseNames = Array.from(new Set(exercisesToEvaluate.map(ex => ex.exerciseName)));
+
+    // 2. Batch-query past logs for all exercises in this workout session in a single database request
+    const { data: allPastLogs, error } = await supabase
+      .from('workout_exercise_logs')
+      .select(`
+        exercise_name,
+        weight,
+        reps,
+        workout_logs!inner(user_id)
+      `)
+      .in('exercise_name', uniqueExerciseNames)
+      .eq('workout_logs.user_id', userId);
+
+    if (error) {
+      console.error('Error batch querying past logs for record detection:', error);
+      return achievements;
+    }
+
+    // 3. Group past logs by exercise_name in memory (Map)
+    const logsByExercise = new Map<string, Array<{ weight: number; reps: number }>>();
+    for (const name of uniqueExerciseNames) {
+      logsByExercise.set(name, []);
+    }
+    if (allPastLogs) {
+      for (const log of allPastLogs) {
+        const list = logsByExercise.get(log.exercise_name);
+        if (list) {
+          list.push({ weight: log.weight || 0, reps: log.reps || 0 });
+        }
+      }
+    }
+
+    // 4. In-memory record evaluation (0 network calls in loop)
+    for (const ex of exercisesToEvaluate) {
+      const doneSets = ex.sets.filter(s => s.is_done && s.reps > 0);
       const isTimed = isTimedExercise(ex.exerciseName);
       const isBodyweight = isBodyweightExercise(ex.exerciseName);
 
@@ -52,37 +97,21 @@ export async function detectWorkoutRecords(
       const setsAtMaxWeight = doneSets.filter(s => (s.weight || 0) === currentMaxWeight);
       const currentMaxRepsAtMaxWeight = Math.max(...setsAtMaxWeight.map(s => s.reps || 0));
 
-      if (currentMaxWeight <= 0 && currentMaxRepsAtMaxWeight <= 0) continue;
-
-      // Query past logs for this exercise for this user
-      const { data: pastLogs, error } = await supabase
-        .from('workout_exercise_logs')
-        .select(`
-          weight,
-          reps,
-          workout_logs!inner(user_id)
-        `)
-        .eq('exercise_name', ex.exerciseName)
-        .eq('workout_logs.user_id', userId);
-
-      if (error) {
-        console.error(`Error querying past logs for ${ex.exerciseName}:`, error);
-        continue;
-      }
+      const pastLogs = logsByExercise.get(ex.exerciseName) || [];
 
       // If no past logs exist yet, this is the baseline / first time, not a broken record
-      if (!pastLogs || pastLogs.length === 0) {
+      if (pastLogs.length === 0) {
         continue;
       }
 
       // Compute historical max weight
-      const pastWeights = pastLogs.map((l: any) => l.weight || 0);
+      const pastWeights = pastLogs.map(l => l.weight);
       const pastMaxWeight = Math.max(...pastWeights, 0);
 
       // Compute historical max reps performed at the current max weight
-      const pastLogsAtCurrentWeight = pastLogs.filter((l: any) => (l.weight || 0) === currentMaxWeight);
+      const pastLogsAtCurrentWeight = pastLogs.filter(l => l.weight === currentMaxWeight);
       const pastMaxRepsAtCurrentWeight = pastLogsAtCurrentWeight.length > 0
-        ? Math.max(...pastLogsAtCurrentWeight.map((l: any) => l.reps || 0))
+        ? Math.max(...pastLogsAtCurrentWeight.map(l => l.reps))
         : 0;
 
       // 1. Check for Strict Max Weight PB (strictly heavier weight)

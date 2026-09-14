@@ -7,6 +7,7 @@ export type CacheCategory =
   | 'monthly_stats'
   | 'yearly_stats'
   | 'exercise_stats'
+  | 'exercise_library'
   | 'user_profile'
   | 'all';
 

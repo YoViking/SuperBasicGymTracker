@@ -115,14 +115,19 @@ export function useMonthlyStats() {
       const avgTime = logsData.length > 0 ? totalDuration / logsData.length : 0;
       const avgVol = logsData.length > 0 ? totalVolume / logsData.length : 0;
 
-      // Now fetch exercise logs for the pie chart
+      // Now fetch exercise logs for the pie chart using an indexed inner join (avoids HTTP 414 URI Too Long)
       let pieChartData: PieChartData[] = [];
       
-      if (logIds.length > 0) {
+      if (logsData.length > 0) {
         const { data: exLogs, error: exLogsErr } = await supabase
           .from('workout_exercise_logs')
-          .select('muscle_group, sets')
-          .in('workout_log_id', logIds);
+          .select(`
+            muscle_group,
+            sets,
+            workout_logs!inner(user_id, created_at)
+          `)
+          .eq('workout_logs.user_id', user.id)
+          .gte('workout_logs.created_at', startOfMonth.toISOString());
 
         if (exLogsErr) throw exLogsErr;
 
