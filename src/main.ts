@@ -97,6 +97,16 @@ const filterSelect = document.getElementById("filter-select") as HTMLSelectEleme
 
 // --- 4. FUNKTIONER ---
 
+const escapeHtml = (str: string | null | undefined): string => {
+  if (!str) return '';
+  return String(str)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#039;');
+};
+
 const updateNavbarState = (isDashboard: boolean) => {
     
     if (isDashboard) {                       // Visar logga och döljer pil i dashboard
@@ -139,8 +149,8 @@ const fetchWorkouts = async () => {
     
     li.innerHTML = `                         
       <div class="workout-info-group">
-        <strong>${workout.name}</strong>
-        <span class="date-tag">${date}</span>
+        <strong>${escapeHtml(workout.name)}</strong>
+        <span class="date-tag">${escapeHtml(date)}</span>
       </div>
       <button class="delete-workout-btn" title="Radera">🗑️</button>
     `;
@@ -269,10 +279,10 @@ const loadWorkoutLogs = async () => {
         : log.workouts?.name || 'Okänt Pass';
       logItem.innerHTML = `
         <div class="log-info">
-          <div class="log-name">${workoutName}</div>
-          <div class="log-date">${dateOnly}</div>
+          <div class="log-name">${escapeHtml(workoutName)}</div>
+          <div class="log-date">${escapeHtml(dateOnly)}</div>
         </div>
-        <div class="log-volume">${log.total_volume || 0} kg</div>
+        <div class="log-volume">${Number(log.total_volume) || 0} kg</div>
       `;
       workoutLogsList.appendChild(logItem);
     });
@@ -325,11 +335,11 @@ const renderExercises = () => {
       <label class="exercise-row">
         <input type="checkbox" ${ex.isDone ? "checked" : ""}>     
         <div class="info">
-           <strong>${ex.name}</strong>
-           <span class="details">${ex.sets} x ${ex.reps}</span>
+           <strong>${escapeHtml(ex.name)}</strong>
+           <span class="details">${Number(ex.sets) || 0} x ${Number(ex.reps) || 0}</span>
         </div>
         <div class="weight-box">
-           <input type="number" value="${ex.weight}" class="weight-input" step="0.1"><span>kg</span>
+           <input type="number" value="${Number(ex.weight) || 0}" class="weight-input" step="0.1"><span>kg</span>
         </div>
       </label>
       <div class="action-buttons">

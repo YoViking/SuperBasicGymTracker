@@ -38,29 +38,11 @@ import {
   getSubMusclesForGroup,
   normalizeTargetKey,
   TARGET_DISPLAY_SV,
+  MUSCLE_GROUP_DISPLAY,
 } from '../utils/muscleHierarchy';
 import { getMuscleCardImage } from '../utils/images';
 
 const MUSCLE_GROUPS = ['All', 'Chest', 'Back', 'Legs', 'Arms', 'Shoulders', 'Core', 'Glutes', 'Other', 'Bookmarked'];
-
-const MUSCLE_GROUP_DISPLAY: Record<string, string> = {
-  All: 'Alla',
-  Alla: 'Alla',
-  Chest: 'Bröst',
-  Back: 'Rygg',
-  Legs: 'Ben',
-  Arms: 'Armar',
-  Shoulders: 'Axlar',
-  Core: 'Core',
-  Glutes: 'Glutes',
-  Other: 'Övrigt',
-  Bookmarked: 'Bokmärkta',
-  Bröst: 'Bröst',
-  Rygg: 'Rygg',
-  Ben: 'Ben',
-  Armar: 'Armar',
-  Axlar: 'Axlar',
-};
 
 const CATEGORY_MUSCLE_GROUPS = [
   { id: 'Chest', label: 'Bröst', sub: 'Pectoralis' },

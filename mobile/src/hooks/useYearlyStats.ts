@@ -2,6 +2,7 @@ import { useState, useCallback, useEffect } from 'react';
 import { supabase } from '../lib/supabase';
 import { useFocusEffect } from 'expo-router';
 import { cacheService } from '../services/cacheService';
+import { calculateMuscleDistribution } from '../utils/muscleHierarchy';
 
 export interface BarChartData {
   value: number; // Volume
@@ -26,17 +27,6 @@ export interface YearlyStats {
   pieChartData: PieChartData[];
   loading: boolean;
 }
-
-// Map muscle groups to colors
-const COLORS: Record<string, string> = {
-  Chest: '#A3E635',     // Lime
-  Back: '#3B82F6',      // Blue
-  Legs: '#8B5CF6',      // Purple
-  Arms: '#EF4444',      // Red
-  Shoulders: '#F59E0B', // Orange
-  Core: '#10B981',      // Emerald
-  Other: '#6B7280',     // Gray
-};
 
 const MONTH_LABELS = ['Jan', 'Feb', 'Mar', 'Apr', 'Maj', 'Jun', 'Jul', 'Aug', 'Sep', 'Okt', 'Nov', 'Dec'];
 
@@ -149,32 +139,7 @@ export function useYearlyStats() {
 
         if (exLogsErr) throw exLogsErr;
 
-        const muscleCounts: Record<string, number> = {};
-        const swedishToEnglish: Record<string, string> = {
-          'Bröst': 'Chest',
-          'Rygg': 'Back',
-          'Ben': 'Legs',
-          'Rumpa': 'Legs', // Group glutes into Legs for simplicity
-          'Armar': 'Arms',
-          'Arm': 'Arms',
-          'Axlar': 'Shoulders',
-          'Axel': 'Shoulders',
-          'Mage': 'Core',
-        };
-
-        exLogs.forEach(ex => {
-          let mg = ex.muscle_group || 'Other';
-          mg = swedishToEnglish[mg] || mg;
-          muscleCounts[mg] = (muscleCounts[mg] || 0) + (ex.sets || 0);
-        });
-
-        pieChartData = Object.entries(muscleCounts)
-          .map(([mg, count]) => ({
-            value: count,
-            text: mg,
-            color: COLORS[mg] || COLORS['Other'],
-          }))
-          .sort((a, b) => b.value - a.value);
+        pieChartData = calculateMuscleDistribution(exLogs || []);
       }
 
       const result: Omit<YearlyStats, 'loading'> = {
