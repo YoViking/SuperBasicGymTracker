@@ -177,7 +177,7 @@ const getStorageHistoryKey = (userId?: string) => (userId ? `@user_body_weight_h
 
 /**
  * Fetches the user's stored body weight from Supabase metadata or user-scoped local storage.
- * Returns default (75 kg) if not set.
+ * Returns default (100 kg) if not set.
  */
 export async function getUserBodyWeight(): Promise<number> {
   try {
@@ -207,6 +207,7 @@ export async function getUserBodyWeight(): Promise<number> {
 
 /**
  * Saves the user's body weight to local storage and updates Supabase user metadata.
+ * Only stores the current weight scalar, avoiding JWT token bloat.
  */
 export async function saveUserBodyWeight(weight: number): Promise<void> {
   if (isNaN(weight) || weight <= 0) return;
@@ -215,9 +216,14 @@ export async function saveUserBodyWeight(weight: number): Promise<void> {
     const storageKey = getStorageKey(user?.id);
 
     await AsyncStorage.setItem(storageKey, weight.toString());
-    await supabase.auth.updateUser({
-      data: { body_weight: weight },
-    });
+    if (user?.id) {
+      await supabase.auth.updateUser({
+        data: {
+          body_weight: weight,
+          body_weight_history: null,
+        },
+      }).catch(err => console.warn('[Volume] Failed to update user weight:', err));
+    }
   } catch (error) {
     console.error('Error saving user body weight:', error);
   }
@@ -225,29 +231,41 @@ export async function saveUserBodyWeight(weight: number): Promise<void> {
 
 /**
  * Fetches the user's body weight history.
+ * Relies on local AsyncStorage to keep Supabase JWT tokens lightweight.
+ * Migrates and cleans up legacy user_metadata.body_weight_history if present.
  */
 export async function getBodyWeightHistory(): Promise<BodyWeightEntry[]> {
   try {
     const { data: { user } } = await supabase.auth.getUser();
     const historyKey = getStorageHistoryKey(user?.id);
 
-    if (user?.user_metadata?.body_weight_history && Array.isArray(user.user_metadata.body_weight_history)) {
-      const history: BodyWeightEntry[] = user.user_metadata.body_weight_history;
-      await AsyncStorage.setItem(historyKey, JSON.stringify(history));
-      return history.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
-    }
-
+    // 1. Check local storage first
     if (user?.id) {
       const cached = await AsyncStorage.getItem(historyKey);
       if (cached) {
-        const parsed: BodyWeightEntry[] = JSON.parse(cached);
-        if (Array.isArray(parsed) && parsed.length > 0) {
-          return parsed.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
-        }
+        try {
+          const parsed: BodyWeightEntry[] = JSON.parse(cached);
+          if (Array.isArray(parsed) && parsed.length > 0) {
+            return parsed.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+          }
+        } catch {}
       }
     }
 
-    // Seed with current weight if history is empty for this user
+    // 2. Legacy migration: check user_metadata and migrate to AsyncStorage
+    if (user?.user_metadata?.body_weight_history && Array.isArray(user.user_metadata.body_weight_history)) {
+      const legacyHistory: BodyWeightEntry[] = user.user_metadata.body_weight_history;
+      await AsyncStorage.setItem(historyKey, JSON.stringify(legacyHistory));
+
+      // Purge bloated array from user_metadata to avoid HTTP 431 JWT bloat
+      await supabase.auth.updateUser({
+        data: { body_weight_history: null },
+      }).catch(() => {});
+
+      return legacyHistory.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+    }
+
+    // 3. Seed with current weight if history is empty for this user
     const currentWeight = await getUserBodyWeight();
     const initialEntry: BodyWeightEntry = {
       id: Date.now().toString(),
@@ -268,6 +286,7 @@ export async function getBodyWeightHistory(): Promise<BodyWeightEntry[]> {
 
 /**
  * Adds a new body weight measurement and updates current body weight.
+ * Persists history to local AsyncStorage and only writes the scalar current weight to Supabase metadata.
  */
 export async function addBodyWeightEntry(weight: number, date?: string): Promise<BodyWeightEntry[]> {
   if (isNaN(weight) || weight <= 0) return [];
@@ -287,15 +306,19 @@ export async function addBodyWeightEntry(weight: number, date?: string): Promise
     const updated = [newEntry, ...history.filter(h => h.id !== newEntry.id)];
     updated.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
 
+    // 1. Save history to local storage (unbounded array never goes to JWT metadata)
     await AsyncStorage.setItem(historyKey, JSON.stringify(updated));
     await AsyncStorage.setItem(storageKey, weight.toString());
 
-    await supabase.auth.updateUser({
-      data: {
-        body_weight: weight,
-        body_weight_history: updated,
-      },
-    });
+    // 2. Only store current scalar body_weight in user_metadata, and clear legacy history array to shrink JWT
+    if (user?.id) {
+      await supabase.auth.updateUser({
+        data: {
+          body_weight: weight,
+          body_weight_history: null,
+        },
+      }).catch(err => console.warn('[Volume] Failed to update auth metadata for body_weight:', err));
+    }
 
     return updated;
   } catch (error) {
