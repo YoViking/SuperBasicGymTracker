@@ -50,7 +50,7 @@ export function useExerciseStats(exerciseName: string) {
       if (!user) return;
 
       const userId = user.id;
-      const cacheKey = `exercise_stats_${exerciseName}`;
+      const cacheKey = `exercise_stats_v2_${exerciseName}`;
 
       if (!force) {
         const memCached = cacheService.get<Omit<ExerciseStats, 'loading'>>(cacheKey, userId);
@@ -89,7 +89,8 @@ export function useExerciseStats(exerciseName: string) {
 
       let maxWeight = 0;
       let maxReps = 0;
-      const weeklyMaxProgression = new Map<string, number>();
+      const weeklyMaxMap = new Map<string, number>();
+      const logEntries: { date: Date; metricValue: number }[] = [];
 
       if (logsData && logsData.length > 0) {
         logsData.forEach((log: any) => {
@@ -105,30 +106,64 @@ export function useExerciseStats(exerciseName: string) {
             // Progression value is duration in seconds
             metricValue = reps;
           } else if (isBodyweight) {
-            // Calculate effective weight including bodyweight percentage
-            const effectiveWeight = (userWeight * multiplier) + weight;
-            metricValue = reps === 1 ? effectiveWeight : effectiveWeight * (1 + reps / 30);
+            // For bodyweight: added weight if used, otherwise reps
+            metricValue = weight > 0 ? weight : reps;
           } else {
-            // Standard 1RM using Epley formula: W * (1 + R/30)
-            metricValue = reps === 1 ? weight : weight * (1 + reps / 30);
+            // Actual weight lifted in kg (matches Current PB)
+            metricValue = weight;
           }
 
           const date = new Date(log.workout_logs.created_at);
-          const weekStr = `v${getWeekNumber(date)}`;
+          const weekNum = getWeekNumber(date);
+          const weekKey = `${date.getFullYear()}-w${weekNum}`;
 
-          const currentWeeklyMax = weeklyMaxProgression.get(weekStr) || 0;
+          logEntries.push({ date, metricValue });
+
+          const currentWeeklyMax = weeklyMaxMap.get(weekKey) || 0;
           if (metricValue > currentWeeklyMax) {
-            weeklyMaxProgression.set(weekStr, metricValue);
+            weeklyMaxMap.set(weekKey, metricValue);
           }
         });
       }
 
-      // Prepare chart data
-      const chartData: ExerciseChartData[] = Array.from(weeklyMaxProgression.entries()).map(([label, val]) => ({
-        value: Number(val.toFixed(1)),
-        label,
-        dataPointText: Number(val.toFixed(1)).toString()
-      }));
+      // Generate the last 7 weeks ending with the current week as the last item
+      const today = new Date();
+      const last7Weeks: { label: string; weekKey: string; date: Date }[] = [];
+      for (let i = 6; i >= 0; i--) {
+        const d = new Date(today);
+        d.setDate(d.getDate() - i * 7);
+        const wNum = getWeekNumber(d);
+        last7Weeks.push({
+          label: `v${wNum}`,
+          weekKey: `${d.getFullYear()}-w${wNum}`,
+          date: d,
+        });
+      }
+
+      let chartData: ExerciseChartData[] = [];
+
+      if (logEntries.length > 0) {
+        // Sort logs chronologically
+        logEntries.sort((a, b) => a.date.getTime() - b.date.getTime());
+
+        // Find baseline for weeks before the 7-week window
+        const firstWeekDate = last7Weeks[0].date;
+        const priorLogs = logEntries.filter((l) => l.date < firstWeekDate);
+        let lastKnownValue = priorLogs.length > 0
+          ? Math.max(...priorLogs.map((l) => l.metricValue))
+          : logEntries[0].metricValue;
+
+        chartData = last7Weeks.map((w) => {
+          if (weeklyMaxMap.has(w.weekKey)) {
+            lastKnownValue = weeklyMaxMap.get(w.weekKey)!;
+          }
+          return {
+            value: Number(lastKnownValue.toFixed(1)),
+            label: w.label,
+            dataPointText: Number(lastKnownValue.toFixed(1)).toString(),
+          };
+        });
+      }
 
       let currentPB = 0;
       let currentPBText = '';

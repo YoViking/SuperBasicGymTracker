@@ -13,7 +13,7 @@ export interface WeeklyStats {
   currentWeekTime: number; // in seconds
   previousWeekVolume: number;
   previousWeekTime: number; // in seconds
-  volumeTrend: { value: number; label: string }[]; // Last 5 weeks, oldest first
+  volumeTrend: { value: number; label: string }[]; // Last 7 weeks, oldest first
   loading: boolean;
 }
 
@@ -49,13 +49,13 @@ export function useWeeklyStats() {
 
       if (!force) {
         const memCached = cacheService.get<Omit<WeeklyStats, 'loading'>>('weekly_stats', userId);
-        if (memCached) {
+        if (memCached && memCached.volumeTrend && memCached.volumeTrend.length === 7) {
           setStats({ ...memCached, loading: false });
           return;
         }
 
         const asyncCached = await cacheService.getAsync<Omit<WeeklyStats, 'loading'>>('weekly_stats', userId);
-        if (asyncCached) {
+        if (asyncCached && asyncCached.volumeTrend && asyncCached.volumeTrend.length === 7) {
           setStats({ ...asyncCached, loading: false });
           return;
         }
@@ -131,17 +131,17 @@ export function useWeeklyStats() {
       }
 
 
-      // 2. Fetch workout logs for the last 5 weeks
+      // 2. Fetch workout logs for the last 7 weeks
       const today = new Date();
       const startOfCurrentWeek = getStartOfWeek(today);
-      const startOf5WeeksAgo = new Date(startOfCurrentWeek);
-      startOf5WeeksAgo.setDate(startOf5WeeksAgo.getDate() - 4 * 7);
+      const startOf7WeeksAgo = new Date(startOfCurrentWeek);
+      startOf7WeeksAgo.setDate(startOf7WeeksAgo.getDate() - 6 * 7);
 
       const { data: logsData, error: logsErr } = await supabase
         .from('workout_logs')
         .select('*')
         .eq('user_id', user.id)
-        .gte('created_at', startOf5WeeksAgo.toISOString())
+        .gte('created_at', startOf7WeeksAgo.toISOString())
         .order('created_at', { ascending: true });
 
       if (logsErr) throw logsErr;
@@ -156,18 +156,20 @@ export function useWeeklyStats() {
       let completedPreviousWeekCount = 0;
       const daysCompleted = Array(7).fill(false);
       
-      const weeklyVolumes = [0, 0, 0, 0, 0]; // 0 is oldest, 4 is current
+      const weeklyVolumes = [0, 0, 0, 0, 0, 0, 0]; // 0 is oldest (7 weeks ago), 6 is current week
 
       logs.forEach((log) => {
         const completedDate = new Date(log.created_at);
-        const diffTime = completedDate.getTime() - startOf5WeeksAgo.getTime();
+        const diffTime = completedDate.getTime() - startOf7WeeksAgo.getTime();
         const weekIndex = Math.floor(diffTime / (1000 * 60 * 60 * 24 * 7));
 
-        if (weekIndex >= 0 && weekIndex <= 4) {
+        if (weekIndex >= 0 && weekIndex <= 6) {
           weeklyVolumes[weekIndex] += log.total_volume || 0;
+        } else if (weekIndex > 6) {
+          weeklyVolumes[6] += log.total_volume || 0;
         }
 
-        if (weekIndex === 4) {
+        if (weekIndex >= 6) {
           // Current week
           currentWeekVolume += log.total_volume || 0;
           currentWeekTime += log.duration_seconds || 0;
@@ -178,7 +180,7 @@ export function useWeeklyStats() {
           // JS getDay: 0=Sun, 1=Mon. We want 0=Mon, 6=Sun
           dayOfWeek = dayOfWeek === 0 ? 6 : dayOfWeek - 1;
           daysCompleted[dayOfWeek] = true;
-        } else if (weekIndex === 3) {
+        } else if (weekIndex === 5) {
           // Previous week
           previousWeekVolume += log.total_volume || 0;
           previousWeekTime += log.duration_seconds || 0;
@@ -187,7 +189,7 @@ export function useWeeklyStats() {
       });
 
       const trend = weeklyVolumes.map((vol, i) => {
-        const d = new Date(startOf5WeeksAgo);
+        const d = new Date(startOf7WeeksAgo);
         d.setDate(d.getDate() + i * 7);
         return {
           value: vol,
