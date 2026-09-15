@@ -46,6 +46,15 @@ export default function WeeklyStats() {
     labelTextStyle: { color: '#94A3B8', fontSize: 10 },
   }));
 
+  // Chart layout calculations to ensure 7 weeks fit perfectly without clipping
+  const initialSpacing = 16;
+  const endSpacing = 24;
+  const numIntervals = Math.max(chartData.length - 1, 1);
+  const spacing = Math.max(28, Math.floor((width - 48 - initialSpacing - endSpacing) / numIntervals));
+  const chartWidth = chartData.length > 0
+    ? initialSpacing + (chartData.length - 1) * spacing + endSpacing
+    : width - 80;
+
   // Difference in volume for the badge
   const volumeDiff = stats.currentWeekVolume - stats.previousWeekVolume;
 
@@ -84,13 +93,14 @@ export default function WeeklyStats() {
         <View style={styles.chartContainer}>
           <LineChart
             data={chartData}
-            width={width - 80}
+            width={chartWidth}
             height={160}
             thickness={2}
             color="#F8FAFC"
             noOfSections={4}
             hideRules
             hideYAxisText
+            yAxisLabelWidth={0}
             yAxisColor="transparent"
             xAxisColor="#F8FAFC"
             xAxisThickness={1}
@@ -98,6 +108,10 @@ export default function WeeklyStats() {
             dataPointsRadius={4}
             hideDataPoints={false}
             isAnimated
+            disableScroll
+            spacing={spacing}
+            initialSpacing={initialSpacing}
+            endSpacing={endSpacing}
           />
         </View>
       </View>

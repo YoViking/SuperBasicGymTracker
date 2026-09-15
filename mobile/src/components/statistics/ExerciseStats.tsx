@@ -21,16 +21,26 @@ export default function ExerciseStats({ exerciseName }: ExerciseStatsProps) {
     );
   }
 
-  // Format the chart data
+  // Format the chart data - exactly 7 weeks
   const chartData = stats.chartData.map((d) => ({
     value: d.value,
     label: d.label,
     dataPointText: d.dataPointText,
     labelTextStyle: { color: '#94A3B8', fontSize: 10 },
-    textColor: '#F8FAFC',
-    textShiftY: -10,
-    textFontSize: 10,
   }));
+
+  // Available chart plot width calculation:
+  // Outer page padding: 16 * 2 = 32
+  // Card padding: 16 * 2 = 32
+  // Card inner width = width - 64
+  // Y-axis label column = 35 + 1 = 36
+  // Available width for plot = (width - 64) - 36 - 6 = width - 106
+  // initialSpacing = 16, endSpacing = 26 (leaves 26px margin after last point so label and dot are never clipped)
+  const initialSpacing = 16;
+  const endSpacing = 26;
+  const numIntervals = Math.max(chartData.length - 1, 1);
+  const spacing = Math.max(28, Math.floor((width - 106 - initialSpacing - endSpacing) / numIntervals));
+  const chartWidth = initialSpacing + (chartData.length - 1) * spacing + endSpacing;
 
   return (
     <View style={styles.container}>
@@ -46,22 +56,31 @@ export default function ExerciseStats({ exerciseName }: ExerciseStatsProps) {
         <View style={styles.legendContainer}>
           <View style={styles.legendDot} />
           <Text style={styles.legendText}>
-            {stats.metricType === 'time' ? 'Max tid (sekunder)' : 'Estimerat 1RM'}
+            {stats.metricType === 'time'
+              ? 'Max tid (sekunder)'
+              : stats.metricType === 'reps'
+              ? 'Max reps'
+              : 'Maxvikt (kg)'}
           </Text>
         </View>
 
-        {stats.chartData.length > 0 ? (
+        {chartData.length > 0 ? (
           <LineChart
             data={chartData}
-            width={width - 80}
+            width={chartWidth}
             height={220}
             thickness={2}
             color="#A3E635"
             noOfSections={5}
             hideRules
-            yAxisTextStyle={{ color: '#F8FAFC', fontSize: 10 }}
-            xAxisColor="#F8FAFC"
-            yAxisColor="#F8FAFC"
+            disableScroll
+            spacing={spacing}
+            initialSpacing={initialSpacing}
+            endSpacing={endSpacing}
+            yAxisLabelWidth={35}
+            yAxisTextStyle={{ color: '#94A3B8', fontSize: 10 }}
+            xAxisColor="#E2E8F0"
+            yAxisColor="#E2E8F0"
             xAxisThickness={1}
             yAxisThickness={1}
             dataPointsColor="#A3E635"
@@ -86,7 +105,7 @@ export default function ExerciseStats({ exerciseName }: ExerciseStatsProps) {
 
         {/* Y Axis title rotated */}
         <Text style={styles.yAxisTitle}>
-          {stats.metricType === 'time' ? 'Tid (sek)' : 'Vikt (kg)'}
+          {stats.metricType === 'time' ? 'Tid (sek)' : stats.metricType === 'reps' ? 'Reps' : 'Vikt (kg)'}
         </Text>
       </View>
     </View>
@@ -123,10 +142,10 @@ const styles = StyleSheet.create({
     borderRadius: 8,
     paddingTop: 24,
     paddingBottom: 40,
-    paddingRight: 24,
-    paddingLeft: 16,
+    paddingHorizontal: 16,
     alignItems: 'center',
     position: 'relative',
+    overflow: 'hidden',
   },
   legendContainer: {
     flexDirection: 'row',
@@ -157,7 +176,7 @@ const styles = StyleSheet.create({
   },
   yAxisTitle: {
     position: 'absolute',
-    left: -20,
+    left: -10,
     top: '50%',
     transform: [{ rotate: '-90deg' }],
     color: '#475569',
