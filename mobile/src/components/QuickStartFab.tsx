@@ -19,12 +19,11 @@ const CENTER = BUTTON_SIZE / 2; // 47
 const TEXT_RADIUS = 34.5; // Perfectly centered between inner circle (r=22) and outer border (r=47)
 
 // Optically balanced kerning angles:
-// 'I' is narrow, so U-I and I-C need smaller angular steps (12.5°),
-// while 'Q' and 'K' are wider, so Q-U and C-K need larger steps (17.5°) for equal whitespace between letters.
-const QUICK_ANGLES = [-30, -12.5, 0, 12.5, 30];
+// 'GET': 3 letters centered at top arc with balanced spacing and curvature
+const GET_ANGLES = [-20, 0, 20];
 
-// In 'START', letters have similar widths, evenly spaced at 15° steps with matching total 60° arc spread.
-const START_ANGLES = [-30, -15, 0, 15, 30];
+// 'STRONG': 6 letters with wider spacing (17° step) along bottom arc for better breathing room
+const STRONG_ANGLES = [-42.5, -25.5, -8.5, 8.5, 25.5, 42.5];
 
 interface CurvedTextProps {
   text: string;
@@ -112,13 +111,13 @@ export default function QuickStartFab({
         onPress={onPress}
         hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
       >
-        {/* QUICK: Optically balanced kerning around top arc */}
+        {/* GET: Optically balanced kerning around top arc */}
         <CurvedText
-          text="QUICK"
+          text="GET"
           radius={TEXT_RADIUS}
           center={CENTER}
           direction="top"
-          angles={QUICK_ANGLES}
+          angles={GET_ANGLES}
         />
 
         {/* Center Circle with Larger Play Icon */}
@@ -131,13 +130,13 @@ export default function QuickStartFab({
           />
         </View>
 
-        {/* START: Optically balanced kerning around bottom arc */}
+        {/* STRONG: Optically balanced kerning around bottom arc */}
         <CurvedText
-          text="START"
+          text="STRONG"
           radius={TEXT_RADIUS}
           center={CENTER}
           direction="bottom"
-          angles={START_ANGLES}
+          angles={STRONG_ANGLES}
         />
       </TouchableOpacity>
     </Animated.View>
